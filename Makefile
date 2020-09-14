@@ -1,5 +1,5 @@
 NVCC = /usr/local/cuda/bin/nvcc
-NVCC_FLAGS = -ccbin /usr/bin/g++-7 -I./cub-1.8.0/ -Xcompiler -Wall
+NVCC_FLAGS = -ccbin /usr/bin/g++-7 -Xcompiler -Wall
 CXX = /usr/bin/g++-7
 CXXFLAGS = -g
 LDFLAGS = -L/usr/local/cuda/lib64 -lcudart -lcusolver
