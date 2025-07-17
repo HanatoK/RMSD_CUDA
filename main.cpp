@@ -1,7 +1,9 @@
 #include "rmsd_cuda.h"
 
 #include <fstream>
-#include <cstdlib>
+// #include <cstdlib>
+#include <fmt/format.h>
+#include <iostream>
 
 // split a string by a specified separator
 void splitString(const std::string& data, const std::string& delim, std::vector<std::string>& dest) {
@@ -62,7 +64,7 @@ int main(int argc, char* argv[]) {
         // compute the optimal rotation matrix
         rot.calculateOptimalRotationMatrix();
         // compute the optimal rmsd
-        std::printf("Optimal RMSD between frame %4lu and %4lu is %15.12lf\n", i, i+1, rot.minimalRMSD(atom_positions[i+1]));
+        std::cout << fmt::format("Optimal RMSD between frame {:4d} and {:4d} is {:15.12f}\n", i, i+1, rot.minimalRMSD(atom_positions[i+1]));
     }
     // direct compute: using the equation in page 1855, "Using Quaternions to Calculate RMSD"
 //     std::printf("Using the equation in page 1855:\n");
@@ -74,19 +76,19 @@ int main(int argc, char* argv[]) {
         // compute the optimal rotation matrix
         rot.calculateOptimalRotationMatrix();
         // compute the optimal rmsd
-        std::printf("Optimal RMSD between frame %4lu and %4lu is %15.12lf\n", i, i+1, rot.minimalRMSD());
+        std::cout << fmt::format("Optimal RMSD between frame {:4d} and {:4d} is {:15.12f}\n", i, i+1, rot.minimalRMSD());
     }
     // optimal RMSD between any two frames
-//     std::printf("Optimal RMSD between any two frames:\n");
-    for (size_t i = 0; i < atom_positions.size() - 1; ++i) {
+    std::cout << "Optimal RMSD between any two frames:\n";
+    for (size_t i = 0; i < atom_positions.size(); ++i) {
         // update reference frames
         rot.updateReference(atom_positions[i]);
-        for (size_t j = i + 1; j < atom_positions.size() - 1; ++j) {
+        for (size_t j = i; j < atom_positions.size(); ++j) {
             // update atomic coordinates
             rot.updateAtoms(atom_positions[j]);
             // compute the optimal rotation matrix
             rot.calculateOptimalRotationMatrix();
-            std::printf("Optimal RMSD between frame %4lu and %4lu is %15.12lf\n", i, j, rot.minimalRMSD());
+            std::cout << fmt::format("Optimal RMSD between frame {:4d} and {:4d} is {:15.12f}\n", i, j, rot.minimalRMSD());
         }
     }
     return 0;
