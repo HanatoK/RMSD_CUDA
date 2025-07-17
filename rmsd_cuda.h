@@ -38,7 +38,7 @@ private:
     double* m_device_eigenvectors; // 4x4
     cudaStream_t m_stream;
     // block size of all CUDA kernels
-    static const int block_size = 32;
+    static const int block_size = 128;
     // buffer for compute center
     AtomPosition* m_center_tmp;
     // CUDA eigensolver
@@ -49,9 +49,11 @@ private:
     double* device_work;
     int* devInfo;
     int lwork;
+    syevjInfo_t syevj_info;
     // RMSD result
     double* m_host_rmsd;
     double* m_device_rmsd;
+    unsigned int* d_count;
 };
 
 #endif
