@@ -52,6 +52,9 @@ host_vector<host_vector<AtomPosition>> readFromFile(const std::string& filename)
 int main(int argc, char* argv[]) {
     // read data from file
     if (argc < 2) return 1;
+#if defined (USE_NR)
+    std::cout << "Use NR algorithm to compute the eigenvectors and eigenvalues\n";
+#endif
     const host_vector<host_vector<AtomPosition>> atom_positions = readFromFile(argv[1]);
     // initialize the rotation CV
     OptimalRotation rot(atom_positions[0].size());

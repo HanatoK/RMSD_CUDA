@@ -8,6 +8,7 @@
 
 #include <cuda_runtime.h>
 #include <cusolverDn.h>
+#include <nvtx3/nvToolsExt.h>
 
 typedef double3 AtomPosition;
 
@@ -93,6 +94,7 @@ private:
     double* m_host_rmsd;
     double* m_device_rmsd;
     unsigned int* d_count;
+    nvtxEventAttributes_t mEventAttrib;
 };
 
 #endif
