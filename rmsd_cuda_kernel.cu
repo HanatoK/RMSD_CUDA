@@ -50,7 +50,7 @@ __global__ void rotate_atoms_kernel(double3* atom_positions, const double* rotat
     }
 }
 
-template <typename T> __device__ int sgn(T val) {
+template <typename T> __inline__ __device__ int sgn(T val) {
   return (T(0) < val) - (val < T(0));
 }
 
@@ -81,7 +81,8 @@ __inline__ __device__ void apply_jacobi(
     A[q*4+p] = 0;
 }
 
-__inline__ __device__ void multiply_jacobi(double* __restrict V, int p, int q, double c, double s) {
+__inline__ __device__ void multiply_jacobi(
+    double* __restrict V, int p, int q, double c, double s) {
     #pragma unroll
     for (int i = 0; i < 4; ++i) {
         const double oip = V[i*4+p];
@@ -97,11 +98,16 @@ __global__ void jacobi_4x4(double* A_in, double* V_in, int* max_reached) {
     const int idx = threadIdx.x;
     const int i = idx / 4;
     const int j = idx % 4;
-    if (i == j) {
-        V[idx] = 1.0;
-    } else {
-        V[idx] = 0;
+    // if (i == j) {
+    //     V[idx] = 1.0;
+    // } else {
+    //     V[idx] = 0;
+    // }
+    if (max_reached && idx == 0) {
+        max_reached[0] = 0;
+        __threadfence();
     }
+    V[idx] = double(i == j);
     A[idx] = A_in[idx];
     __syncthreads();
     // printf("(in) idx = %d, A[%d] = %12.7f\n", idx, idx, A[idx]);

@@ -94,6 +94,9 @@ private:
     double* m_host_rmsd;
     double* m_device_rmsd;
     unsigned int* d_count;
+#if defined (USE_NR)
+    int* max_reached;
+#endif
     nvtxEventAttributes_t mEventAttrib;
 };
 
