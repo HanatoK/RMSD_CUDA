@@ -172,4 +172,7 @@ OptimalRotation::~OptimalRotation() {
     cudaFree(m_device_rmsd);
     cudaFreeHost(m_host_rmsd);
     cudaFree(d_count);
+#if defined(USE_NR)
+    cudaFreeHost(max_reached);
+#endif
 }

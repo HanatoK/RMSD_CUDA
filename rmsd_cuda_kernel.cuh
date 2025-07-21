@@ -3,14 +3,8 @@
 
 #include "cub/block/block_reduce.cuh"
 
-#if defined(USE_NR)
-#define MAX_EIGVAL_INDEX 0
-#else
-#define MAX_EIGVAL_INDEX 3
-#endif
-
 // eq 33 in "Using Quaternions to Calculate RMSD"
-__global__ void build_rotation_matrix_kernel(double* eigenvectors, double* rotation_matrix, const size_t max_eigenvalue_index = MAX_EIGVAL_INDEX);
+__global__ void build_rotation_matrix_kernel(double* eigenvectors, double* rotation_matrix, const size_t max_eigenvalue_index = 3);
 
 // move atoms to a given center
 __global__ void move_atom_to_center_kernel(double3* atom_positions, double3* center, const size_t num_atoms);

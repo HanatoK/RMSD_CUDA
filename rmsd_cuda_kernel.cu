@@ -4,17 +4,10 @@
 __global__ void build_rotation_matrix_kernel(double* eigenvectors, double* rotation_matrix, const size_t max_eigenvalue_index) {
     if (threadIdx.x == 0) {
         double q[4];
-#if defined(USE_NR)
-        q[0] = eigenvectors[max_eigenvalue_index + 0 * 4];
-        q[1] = eigenvectors[max_eigenvalue_index + 1 * 4];
-        q[2] = eigenvectors[max_eigenvalue_index + 2 * 4];
-        q[3] = eigenvectors[max_eigenvalue_index + 3 * 4];
-#else
         q[0] = eigenvectors[max_eigenvalue_index * 4 + 0];
         q[1] = eigenvectors[max_eigenvalue_index * 4 + 1];
         q[2] = eigenvectors[max_eigenvalue_index * 4 + 2];
         q[3] = eigenvectors[max_eigenvalue_index * 4 + 3];
-#endif
         rotation_matrix[0 * 3 + 0] = q[0] * q[0] + q[1] * q[1] - q[2] * q[2] - q[3] * q[3];
         rotation_matrix[0 * 3 + 1] = 2.0 * (q[1] * q[2] - q[0] * q[3]);
         rotation_matrix[0 * 3 + 2] = 2.0 * (q[1] * q[3] + q[0] * q[2]);
@@ -93,7 +86,7 @@ __inline__ __device__ void multiply_jacobi(
 }
 
 // Use exactly 16 threads
-__global__ void jacobi_4x4(double* A_in, double* V_in, int* max_reached) {
+__global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
     __shared__ double A[4*4], V[4*4];
     const int idx = threadIdx.x;
     const int i = idx / 4;
@@ -161,7 +154,7 @@ __global__ void jacobi_4x4(double* A_in, double* V_in, int* max_reached) {
             k = i0;
             p = A[i0*4+i0];
             for (int j0 = i0 + 1; j0 < 4; ++j0) {
-                if (A[j0*4+j0] >= p) {
+                if (A[j0*4+j0] <= p) {
                     k = j0;
                     p = A[j0*4+j0];
                 }
@@ -178,6 +171,7 @@ __global__ void jacobi_4x4(double* A_in, double* V_in, int* max_reached) {
         }
     }
     __syncthreads();
-    A_in[idx] = V[idx];
-    if (i == j) V_in[i] = A[idx];
+    // Transpose
+    A_in[i*4+j] = V[j*4+i];
+    if (i == j) eigvals[i] = A[idx];
 }
