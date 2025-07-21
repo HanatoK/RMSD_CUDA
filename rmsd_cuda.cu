@@ -20,19 +20,6 @@ bool isDevicePointer(const void* ptr) {
     return is_device_pointer;
 }
 
-OptimalRotation::OptimalRotation(const std::vector<AtomPosition>& atom_positions, const std::vector<AtomPosition>& reference_positions):
-OptimalRotation(atom_positions.data(), reference_positions.data(), atom_positions.size())
-{}
-
-OptimalRotation::OptimalRotation(const AtomPosition* atom_positions, const AtomPosition* reference_positions, const size_t num_atoms): OptimalRotation(num_atoms) {
-    cudaMemcpyAsync(m_device_reference_positions, reference_positions, m_num_atoms * sizeof(AtomPosition), cudaMemcpyHostToDevice, m_stream);
-    cudaMemcpyAsync(m_device_atom_positions, atom_positions, m_num_atoms * sizeof(AtomPosition), cudaMemcpyHostToDevice, m_stream);
-    bringToCenterDevice(m_device_reference_positions, m_num_atoms);
-    bringToCenterDevice(m_device_atom_positions, m_num_atoms);
-    calculateOptimalRotationMatrix();
-    cudaStreamSynchronize(m_stream);
-}
-
 OptimalRotation::OptimalRotation(const size_t num_atoms) {
     cudaStreamCreate(&m_stream);
     m_num_atoms = num_atoms;
@@ -64,13 +51,13 @@ OptimalRotation::OptimalRotation(const size_t num_atoms) {
     cudaMemsetAsync(d_count, 0, 1 * sizeof(unsigned int), m_stream);
 }
 
-void OptimalRotation::updateReference(const std::vector<AtomPosition>& reference_positions) {
+void OptimalRotation::updateReference(const host_vector<AtomPosition>& reference_positions) {
     cudaMemcpyAsync(m_device_reference_positions, reference_positions.data(), m_num_atoms * sizeof(AtomPosition), cudaMemcpyHostToDevice, m_stream);
     bringToCenterDevice(m_device_reference_positions, m_num_atoms);
     // cudaStreamSynchronize(m_stream);
 }
 
-void OptimalRotation::updateAtoms(const std::vector<AtomPosition>& atom_positions) {
+void OptimalRotation::updateAtoms(const host_vector<AtomPosition>& atom_positions) {
     cudaMemcpyAsync(m_device_atom_positions, atom_positions.data(), m_num_atoms * sizeof(AtomPosition), cudaMemcpyHostToDevice, m_stream);
     bringToCenterDevice(m_device_atom_positions, m_num_atoms);
     // cudaStreamSynchronize(m_stream);
@@ -122,7 +109,7 @@ double OptimalRotation::minimalRMSD() const {
 }
 
 // compute the optimal rmsd with respect to a specified frame
-double OptimalRotation::minimalRMSD(const std::vector<AtomPosition>& atom_positions) const {
+double OptimalRotation::minimalRMSD(const host_vector<AtomPosition>& atom_positions) const {
     cudaMemsetAsync(m_device_rmsd, 0, 1 * sizeof(double), m_stream);
     AtomPosition* device_atom_positions;
     cudaMalloc(&device_atom_positions, m_num_atoms * sizeof(AtomPosition));
@@ -148,6 +135,7 @@ double OptimalRotation::minimalRMSD(const std::vector<AtomPosition>& atom_positi
 }
 
 OptimalRotation::~OptimalRotation() {
+    cudaStreamSynchronize(m_stream);
     cudaFree(m_device_atom_positions);
     cudaFree(m_device_reference_positions);
     cudaFree(m_device_rotation_matrix);
@@ -162,5 +150,4 @@ OptimalRotation::~OptimalRotation() {
     cudaFree(m_device_rmsd);
     cudaFreeHost(m_host_rmsd);
     cudaFree(d_count);
-    cudaDeviceReset();
 }
