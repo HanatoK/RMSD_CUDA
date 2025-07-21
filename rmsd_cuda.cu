@@ -49,6 +49,16 @@ OptimalRotation::OptimalRotation(const size_t num_atoms) {
     cudaMallocHost(&m_host_rmsd, 1 * sizeof(double));
     cudaMalloc(&d_count, 1 * sizeof(unsigned int));
     cudaMemsetAsync(d_count, 0, 1 * sizeof(unsigned int), m_stream);
+    mEventAttrib.version = NVTX_VERSION;
+    mEventAttrib.size = NVTX_EVENT_ATTRIB_STRUCT_SIZE;
+    mEventAttrib.colorType = NVTX_COLOR_ARGB;
+    mEventAttrib.color = 0xFF880000;
+    mEventAttrib.messageType = NVTX_MESSAGE_TYPE_ASCII;
+#if defined (USE_NR)
+    mEventAttrib.message.ascii = "NR";
+#else
+    mEventAttrib.message.ascii = "cuSolver";
+#endif
 }
 
 void OptimalRotation::updateReference(const host_vector<AtomPosition>& reference_positions) {
@@ -73,7 +83,6 @@ void OptimalRotation::bringToCenterDevice(AtomPosition* device_atom_positions, c
 }
 
 void OptimalRotation::calculateOptimalRotationMatrix() {
-    const size_t n_cols = 4;
 #ifdef DEBUG
     const size_t n_rows = 4;
 #endif
@@ -84,8 +93,15 @@ void OptimalRotation::calculateOptimalRotationMatrix() {
     cudaMemsetAsync(m_device_eigenvectors, 0, 4 * 4 * sizeof(double), m_stream);
     build_matrix_F_kernel<block_size><<<num_blocks, block_size, 0, m_stream>>>(m_device_atom_positions, m_device_reference_positions, m_device_eigenvectors, m_num_atoms, d_count);
 
+    nvtxRangePushEx(&mEventAttrib);
     // device_matrix_F is the eigenvectors after solving
+#if defined(USE_NR)
+    jacobi_4x4<<<1,16,0,m_stream>>>(m_device_eigenvectors, m_device_eigenvalues);
+#else
+    const size_t n_cols = 4;
     cusolver_status = cusolverDnDsyevj(cusolverH, jobz, uplo, n_cols, m_device_eigenvectors, n_cols, m_device_eigenvalues, device_work, lwork, devInfo, syevj_info);
+#endif
+    nvtxRangePop();
     // cudaStreamSynchronize(m_stream);
     // build the optimal rotation matrix
     build_rotation_matrix_kernel<<<1,1,0,m_stream>>>(m_device_eigenvectors, m_device_rotation_matrix);

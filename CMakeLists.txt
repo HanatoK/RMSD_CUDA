@@ -17,6 +17,14 @@ if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
   set(CMAKE_CUDA_ARCHITECTURES native)
 endif()
 
-add_executable(${CMAKE_PROJECT_NAME} main.cpp rmsd_cuda.h rmsd_cuda.cu rmsd_cuda_kernel.cu rmsd_cuda_kernel.cuh)
-target_link_libraries(${CMAKE_PROJECT_NAME} CUDA::cusolver CUDA::cudart CUDA::nvtx3 fmt)
-set_property(TARGET ${CMAKE_PROJECT_NAME} PROPERTY LANGUAGE CUDA)
+set(cusolver_bin "${CMAKE_PROJECT_NAME}_cusolver")
+
+add_executable(${cusolver_bin} main.cpp rmsd_cuda.h rmsd_cuda.cu rmsd_cuda_kernel.cu rmsd_cuda_kernel.cuh)
+target_link_libraries(${cusolver_bin} CUDA::cusolver CUDA::cudart CUDA::nvtx3 fmt)
+set_property(TARGET ${cusolver_bin} PROPERTY LANGUAGE CUDA)
+
+set(nr_bin "${CMAKE_PROJECT_NAME}_nr")
+add_executable(${nr_bin} main.cpp rmsd_cuda.h rmsd_cuda.cu rmsd_cuda_kernel.cu rmsd_cuda_kernel.cuh)
+target_compile_definitions(${nr_bin} PRIVATE USE_NR)
+target_link_libraries(${nr_bin} CUDA::cusolver CUDA::cudart CUDA::nvtx3 fmt)
+set_property(TARGET ${nr_bin} PROPERTY LANGUAGE CUDA)
