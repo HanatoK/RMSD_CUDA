@@ -26,15 +26,15 @@ void splitString(const std::string& data, const std::string& delim, std::vector<
 }
 
 // read data from file
-std::vector<std::vector<AtomPosition>> readFromFile(const std::string& filename) {
+host_vector<host_vector<AtomPosition>> readFromFile(const std::string& filename) {
     std::ifstream ifs_traj(filename.c_str());
     std::string line;
     std::vector<std::string> fields;
-    std::vector<std::vector<AtomPosition>> atom_sets;
+    host_vector<host_vector<AtomPosition>> atom_sets;
     while (std::getline(ifs_traj, line)) {
         splitString(line, std::string{" "}, fields);
         if (fields.size() > 0 && (fields.size() % 3 == 0)) {
-            std::vector<AtomPosition> tmp_set;
+            host_vector<AtomPosition> tmp_set;
             for (size_t i = 0; i < fields.size() / 3; ++i) {
                 AtomPosition atom_pos;
                 atom_pos.x = std::stod(fields[i*3]);
@@ -52,7 +52,7 @@ std::vector<std::vector<AtomPosition>> readFromFile(const std::string& filename)
 int main(int argc, char* argv[]) {
     // read data from file
     if (argc < 2) return 1;
-    const std::vector<std::vector<AtomPosition>> atom_positions = readFromFile(argv[1]);
+    const host_vector<host_vector<AtomPosition>> atom_positions = readFromFile(argv[1]);
     // initialize the rotation CV
     OptimalRotation rot(atom_positions[0].size());
     // indirect compute rmsd: rotate and use RMSD equation directly

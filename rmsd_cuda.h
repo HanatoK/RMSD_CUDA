@@ -11,23 +11,62 @@
 
 typedef double3 AtomPosition;
 
+template <typename T>
+class CudaHostAllocator {
+public:
+  using value_type = T;
+
+  CudaHostAllocator() = default;
+
+  template<typename U>
+  constexpr CudaHostAllocator(const CudaHostAllocator<U>&) noexcept {}
+
+  friend bool operator==(const CudaHostAllocator&, const CudaHostAllocator&) { return true; }
+  friend bool operator!=(const CudaHostAllocator&, const CudaHostAllocator&) { return false; }
+
+  T* allocate(size_t n) {
+    T* ptr;
+    if (cudaHostAlloc(&ptr, n * sizeof(T), cudaHostAllocMapped) != cudaSuccess) {
+      // std::cerr << "BAD ALLOC!" << std::endl;
+      throw std::bad_alloc();
+    }
+    // std::cerr << "CudaHostAllocator: allocate at " << ptr << std::endl;
+    return ptr;
+  }
+  void deallocate(T* ptr, size_t n) noexcept {
+    cudaFreeHost(ptr);
+  }
+  template<typename U, typename... Args>
+  void construct(U* p, Args&&... args) {
+      new(p) U(std::forward<Args>(args)...);
+  }
+
+  template<typename U>
+  void destroy(U* p) noexcept {
+      p->~U();
+  }
+};
+
+template <typename T>
+using host_vector = std::vector<T, CudaHostAllocator<T>>;
+
 bool isDevicePointer(const void* ptr);
 
 class OptimalRotation {
 public:
-    OptimalRotation(const std::vector<AtomPosition>& atom_positions, const std::vector<AtomPosition>& reference_positions);
+    OptimalRotation(const host_vector<AtomPosition>& atom_positions, const host_vector<AtomPosition>& reference_positions);
     OptimalRotation(const AtomPosition* atom_positions, const AtomPosition* reference_positions, const size_t num_atoms);
     OptimalRotation(const size_t num_atoms);
     OptimalRotation(const OptimalRotation& rot) = delete; // non-copyable
     ~OptimalRotation();
-    void updateReference(const std::vector<AtomPosition>& reference_positions);
-    void updateAtoms(const std::vector<AtomPosition>& atom_positions);
+    void updateReference(const host_vector<AtomPosition>& reference_positions);
+    void updateAtoms(const host_vector<AtomPosition>& atom_positions);
 //     void bringToCenterHost(AtomPosition* atom_positions, const size_t num_atoms) const;
     void bringToCenterDevice(AtomPosition* device_atom_positions, const size_t num_atoms);
     void calculateOptimalRotationMatrix(); // main computing function
 //     void rotate(AtomPosition* atom_positions, const size_t num_atoms);
     double minimalRMSD() const;
-    double minimalRMSD(const std::vector<AtomPosition>& atom_positions) const;
+    double minimalRMSD(const host_vector<AtomPosition>& atom_positions) const;
 //     double minimalRMSD(const AtomPosition* atom_positions, const AtomPosition* reference_positions, const size_t num_atoms);
 private:
     size_t m_num_atoms;
