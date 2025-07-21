@@ -98,11 +98,6 @@ __global__ void jacobi_4x4(double* A_in, double* V_in, int* max_reached) {
     const int idx = threadIdx.x;
     const int i = idx / 4;
     const int j = idx % 4;
-    // if (i == j) {
-    //     V[idx] = 1.0;
-    // } else {
-    //     V[idx] = 0;
-    // }
     if (max_reached && idx == 0) {
         max_reached[0] = 0;
         __threadfence();
@@ -149,6 +144,7 @@ __global__ void jacobi_4x4(double* A_in, double* V_in, int* max_reached) {
         __syncwarp();
         off_diag_sum = __shfl_sync(0xFFFFFFFF, off_diag_sum, 0);
         __syncwarp();
+        // Check the number of iterations
         ++iteration;
         if (iteration > max_iteration) {
             if (idx == 0 && max_reached) atomicAdd(max_reached, 1);
