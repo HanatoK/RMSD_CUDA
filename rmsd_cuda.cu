@@ -59,6 +59,10 @@ OptimalRotation::OptimalRotation(const size_t num_atoms) {
 #else
     mEventAttrib.message.ascii = "cuSolver";
 #endif
+#if defined (USE_NR)
+    cudaMallocHost(&max_reached, sizeof(int));
+    cudaMemsetAsync(max_reached, 0, sizeof(int));
+#endif
 }
 
 void OptimalRotation::updateReference(const host_vector<AtomPosition>& reference_positions) {
@@ -94,9 +98,11 @@ void OptimalRotation::calculateOptimalRotationMatrix() {
     build_matrix_F_kernel<block_size><<<num_blocks, block_size, 0, m_stream>>>(m_device_atom_positions, m_device_reference_positions, m_device_eigenvectors, m_num_atoms, d_count);
 
     nvtxRangePushEx(&mEventAttrib);
-    // device_matrix_F is the eigenvectors after solving
 #if defined(USE_NR)
-    jacobi_4x4<<<1,16,0,m_stream>>>(m_device_eigenvectors, m_device_eigenvalues);
+    jacobi_4x4<<<1,16,0,m_stream>>>(m_device_eigenvectors, m_device_eigenvalues, max_reached);
+    if (max_reached[0] > 0) {
+        std::cerr << "Maximum number of iterations reached!\n";
+    }
 #else
     const size_t n_cols = 4;
     cusolver_status = cusolverDnDsyevj(cusolverH, jobz, uplo, n_cols, m_device_eigenvectors, n_cols, m_device_eigenvalues, device_work, lwork, devInfo, syevj_info);
