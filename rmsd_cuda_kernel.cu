@@ -101,7 +101,6 @@ __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
     // printf("(in) idx = %d, A[%d] = %12.7f\n", idx, idx, A[idx]);
     const int max_iteration = 50;
     double off_diag_sum = (j > i) ? A[idx] * A[idx] : 0.0;
-    off_diag_sum = off_diag_sum * off_diag_sum;
     // printf("idx = %d, off_diag = %f\n", off_diag_sum);
     typedef cub::WarpReduce<double, 16> WarpReduce;
     __shared__ typename WarpReduce::TempStorage temp_storage;
