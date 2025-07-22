@@ -106,14 +106,20 @@ void OptimalRotation::bringToCenterDevice(AtomPosition* device_atom_positions, c
         } else {
             checkCudaErrors(cudaGraphAddMemsetNode(&counterSetNode, m_graph, &last_node, 1, &memsetParams));
         }
-        last_node = counterSetNode;
+        // checkCudaErrors(cudaGraphAddMemsetNode(&counterSetNode, m_graph, NULL, 0, &memsetParams));
+        // last_node = counterSetNode;
         memsetParams.dst            = m_center_tmp;
         memsetParams.elementSize    = sizeof(float);
         memsetParams.width          = 1 * sizeof(AtomPosition) / memsetParams.elementSize;
-        checkCudaErrors(cudaGraphAddMemsetNode(&centerSetNode, m_graph, &last_node, 1, &memsetParams));
-        last_node = centerSetNode;
+        if (last_node == nullptr) {
+            checkCudaErrors(cudaGraphAddMemsetNode(&centerSetNode, m_graph, NULL, 0, &memsetParams));
+        } else {
+            checkCudaErrors(cudaGraphAddMemsetNode(&centerSetNode, m_graph, &last_node, 1, &memsetParams));
+        }
+        // last_node = centerSetNode;
         // Run kernels
         cudaKernelNodeParams kernelNodeParams = {0};
+        cudaGraphNode_t dependencies[] = {counterSetNode, centerSetNode};
         const void *getCenterKernelArgs[] =
             {&device_atom_positions, &m_center_tmp, &num_atoms, &d_count};
         kernelNodeParams.func           = (void*)get_center_kernel<block_size>;
@@ -122,7 +128,7 @@ void OptimalRotation::bringToCenterDevice(AtomPosition* device_atom_positions, c
         kernelNodeParams.sharedMemBytes = 0;
         kernelNodeParams.kernelParams   = const_cast<void**>(getCenterKernelArgs);
         kernelNodeParams.extra          = NULL;
-        checkCudaErrors(cudaGraphAddKernelNode(&getCenterKernelNode, m_graph, &last_node, 1, &kernelNodeParams));
+        checkCudaErrors(cudaGraphAddKernelNode(&getCenterKernelNode, m_graph, dependencies, 2, &kernelNodeParams));
         last_node = getCenterKernelNode;
         const void* moveAtomToCenterKernelArgs[] =
             {&device_atom_positions, &m_center_tmp, &num_atoms};
@@ -157,14 +163,15 @@ void OptimalRotation::calculateOptimalRotationMatrix() {
         memsetParams.height         = 1;
         cudaGraphAddMemsetNode(
             &counterSetNode, m_graph, &last_node, 1, &memsetParams);
-        last_node = counterSetNode;
+        // last_node = counterSetNode;
         memsetParams.dst            = m_device_eigenvectors;
         memsetParams.elementSize    = sizeof(float);
         memsetParams.width          = 4 * 4 * sizeof(double) / memsetParams.elementSize;
         cudaGraphAddMemsetNode(
             &eigenVectorsSetNode, m_graph, &last_node, 1, &memsetParams);
-        last_node = eigenVectorsSetNode;
+        // last_node = eigenVectorsSetNode;
         // build matrix F
+        cudaGraphNode_t dependencies[] = {counterSetNode, eigenVectorsSetNode};
         cudaGraphNode_t buildMatrixFNode;
         cudaKernelNodeParams kernelNodeParams = {0};
         const void *buildMatrixFKernelArgs[] =
@@ -176,7 +183,7 @@ void OptimalRotation::calculateOptimalRotationMatrix() {
         kernelNodeParams.kernelParams   =
             const_cast<void**>(buildMatrixFKernelArgs);
         kernelNodeParams.extra          = NULL;
-        cudaGraphAddKernelNode(&buildMatrixFNode, m_graph, &last_node, 1, &kernelNodeParams);
+        cudaGraphAddKernelNode(&buildMatrixFNode, m_graph, dependencies, 2, &kernelNodeParams);
         last_node = buildMatrixFNode;
     }
 #else
@@ -261,13 +268,14 @@ double OptimalRotation::minimalRMSD() const {
         memsetParams.height         = 1;
         checkCudaErrors(cudaGraphAddMemsetNode(
             &counterSetNode, m_graph, &last_node, 1, &memsetParams));
-        last_node = counterSetNode;
+        // last_node = counterSetNode;
         memsetParams.dst            = m_device_rmsd;
         memsetParams.elementSize    = sizeof(float);
         memsetParams.width          = sizeof(double) / memsetParams.elementSize;
         checkCudaErrors(cudaGraphAddMemsetNode(
             &deviceRMSDSetNode, m_graph, &last_node, 1, &memsetParams));
-        last_node = deviceRMSDSetNode;
+        // last_node = deviceRMSDSetNode;
+        cudaGraphNode_t RMSDDependencies[] = {counterSetNode, deviceRMSDSetNode};
         // Compute RMSD
         cudaGraphNode_t RMSDKernelNode;
         cudaKernelNodeParams kernelNodeParams = {0};
@@ -287,7 +295,7 @@ double OptimalRotation::minimalRMSD() const {
         kernelNodeParams.kernelParams   = const_cast<void**>(kernelArgs);
         kernelNodeParams.extra          = NULL;
         checkCudaErrors(cudaGraphAddKernelNode(
-            &RMSDKernelNode, m_graph, &last_node, 1, &kernelNodeParams));
+            &RMSDKernelNode, m_graph, RMSDDependencies, 2, &kernelNodeParams));
         last_node = RMSDKernelNode;
         // Instantiate graph
         checkCudaErrors(cudaGraphInstantiate(&m_instance, m_graph, NULL, NULL, 0));
