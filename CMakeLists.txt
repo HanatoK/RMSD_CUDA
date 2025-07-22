@@ -28,3 +28,9 @@ add_executable(${nr_bin} main.cpp rmsd_cuda.h rmsd_cuda.cu rmsd_cuda_kernel.cu r
 target_compile_definitions(${nr_bin} PRIVATE USE_NR)
 target_link_libraries(${nr_bin} CUDA::cusolver CUDA::cudart CUDA::nvtx3 fmt)
 set_property(TARGET ${nr_bin} PROPERTY LANGUAGE CUDA)
+
+set(nr_graph_bin "${CMAKE_PROJECT_NAME}_nr_graph")
+add_executable(${nr_graph_bin} main.cpp rmsd_cuda.h rmsd_cuda.cu rmsd_cuda_kernel.cu rmsd_cuda_kernel.cuh)
+target_compile_definitions(${nr_graph_bin} PRIVATE USE_NR USE_CUDA_GRAPH)
+target_link_libraries(${nr_graph_bin} CUDA::cusolver CUDA::cudart CUDA::nvtx3 fmt)
+set_property(TARGET ${nr_graph_bin} PROPERTY LANGUAGE CUDA)

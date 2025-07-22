@@ -10,6 +10,34 @@
 #include <cusolverDn.h>
 #include <nvtx3/nvToolsExt.h>
 
+template <typename T>
+void check(T result, char const *const func, const char *const file,
+           int const line) {
+  if (result) {
+    fprintf(stderr, "CUDA error at %s:%d code=%d \"%s\" \n", file, line,
+            static_cast<unsigned int>(result), func);
+    exit(EXIT_FAILURE);
+  }
+}
+
+#define checkCudaErrors(val) check((val), #val, __FILE__, __LINE__)
+
+#define getLastCudaError(msg) __getLastCudaError(msg, __FILE__, __LINE__)
+
+inline void __getLastCudaError(const char *errorMessage, const char *file,
+                               const int line) {
+  cudaError_t err = cudaGetLastError();
+
+  if (cudaSuccess != err) {
+    fprintf(stderr,
+            "%s(%i) : getLastCudaError() CUDA error :"
+            " %s : (%d) %s.\n",
+            file, line, errorMessage, static_cast<int>(err),
+            cudaGetErrorString(err));
+    exit(EXIT_FAILURE);
+  }
+}
+
 typedef double3 AtomPosition;
 
 template <typename T>
@@ -55,8 +83,6 @@ bool isDevicePointer(const void* ptr);
 
 class OptimalRotation {
 public:
-    OptimalRotation(const host_vector<AtomPosition>& atom_positions, const host_vector<AtomPosition>& reference_positions);
-    OptimalRotation(const AtomPosition* atom_positions, const AtomPosition* reference_positions, const size_t num_atoms);
     OptimalRotation(const size_t num_atoms);
     OptimalRotation(const OptimalRotation& rot) = delete; // non-copyable
     ~OptimalRotation();
@@ -66,8 +92,14 @@ public:
     void bringToCenterDevice(AtomPosition* device_atom_positions, const size_t num_atoms);
     void calculateOptimalRotationMatrix(); // main computing function
 //     void rotate(AtomPosition* atom_positions, const size_t num_atoms);
+#if defined (USE_CUDA_GRAPH)
+    void resetGraph();
+    double minimalRMSD();
+    // double minimalRMSD(const host_vector<AtomPosition>& atom_positions);
+#else
     double minimalRMSD() const;
     double minimalRMSD(const host_vector<AtomPosition>& atom_positions) const;
+#endif
 //     double minimalRMSD(const AtomPosition* atom_positions, const AtomPosition* reference_positions, const size_t num_atoms);
 private:
     size_t m_num_atoms;
@@ -98,6 +130,12 @@ private:
     int* max_reached;
 #endif
     nvtxEventAttributes_t mEventAttrib;
+#if defined (USE_CUDA_GRAPH)
+    cudaGraph_t m_graph;
+    cudaGraphExec_t m_instance;
+    cudaGraphNode_t last_node;
+    bool graphCreated;
+#endif
 };
 
 #endif
