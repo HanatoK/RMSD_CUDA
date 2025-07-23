@@ -85,51 +85,57 @@ __inline__ __device__ void multiply_jacobi(
     }
 }
 
-// Use exactly 16 threads
+// Use exactly 1 threads
 __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
-    __shared__ double A[4*4], V[4*4];
+    double A[4*4];
+    double V[4*4] = {0};
     const int idx = threadIdx.x;
-    const int i = idx / 4;
-    const int j = idx % 4;
+    // const int i = idx / 4;
+    // const int j = idx % 4;
     if (max_reached && idx == 0) {
         max_reached[0] = 0;
         __threadfence();
     }
-    V[idx] = double(i == j);
-    A[idx] = A_in[idx];
-    __syncthreads();
+    if (idx == 0) {
+        // V[idx] = double(i == j);
+        // A[idx] = A_in[idx];
+        V[0*4+0] = 1;
+        V[1*4+1] = 1;
+        V[2*4+2] = 1;
+        V[3*4+3] = 1;
+        // memcpy(A, A_in, 4*4*sizeof(double));
+        A[0] = A_in[0];
+        A[1] = A_in[1];
+        A[2] = A_in[2];
+        A[3] = A_in[3];
+        A[4] = A_in[4];
+        A[5] = A_in[5];
+        A[6] = A_in[6];
+        A[7] = A_in[7];
+        A[8] = A_in[8];
+        A[9] = A_in[9];
+        A[10] = A_in[10];
+        A[11] = A_in[11];
+        A[12] = A_in[12];
+        A[13] = A_in[13];
+        A[14] = A_in[14];
+        A[15] = A_in[15];
+        // __threadfence();
+    }
+    // __syncthreads();
     // printf("(in) idx = %d, A[%d] = %12.7f\n", idx, idx, A[idx]);
     const int max_iteration = 50;
-    double off_diag_sum = (j > i) ? A[idx] * A[idx] : 0.0;
-    // printf("idx = %d, off_diag = %f\n", off_diag_sum);
-    typedef cub::WarpReduce<double, 16> WarpReduce;
-    __shared__ typename WarpReduce::TempStorage temp_storage;
-    off_diag_sum = WarpReduce(temp_storage).Sum(off_diag_sum);
-    __syncwarp();
-    off_diag_sum = __shfl_sync(0xFFFFFFFF, off_diag_sum, 0);
-    __syncwarp();
+    double off_diag_sum =
+        A[0*4+1]*A[0*4+1]+A[0*4+2]*A[0*4+2]+A[0*4+3]*A[0*4+3]+
+        A[1*4+2]*A[1*4+2]+A[1*4+3]*A[1*4+3]+
+        A[2*4+3]*A[2*4+3];
+    // off_diag_sum = __shfl_sync(0xFFFFFFFF, off_diag_sum, 0);
+    // __syncwarp();
     int iteration = 0;
     while (off_diag_sum > 1e-16) {
         double c, s;
         // Apply Jacobi rotation
         if (idx == 0) {
-            // #pragma unroll
-            // for (int p = 0; p < 4; ++p) {
-            //     for (int q = p + 1; q < 4; ++q) {
-            //         const double a_pq = A[p*4+q];
-            //         if (abs(a_pq) > 0) {
-            //             const double a_pp = A[p*4+p];
-            //             const double a_qq = A[q*4+q];
-            //             const double theta = 0.5 * (a_qq - a_pp) / a_pq;
-            //             const double sign = sgn(theta) == 0 ? 1.0 : sgn(theta);
-            //             const double t = sign * (sqrt(theta * theta + 1.0) - abs(theta));
-            //             c = rsqrt(t * t + 1.0);
-            //             s = t * c;
-            //             apply_jacobi(A, p, q, c, s);
-            //             multiply_jacobi(V, p, q, c, s);
-            //         }
-            //     }
-            // }
             /// NOTE: There are different orders for accessing A:
             /// (i)  (0,1), (2,3), (0,2), (1,3), (0,3), (1,2);
             /// (ii) (0,1), (0,2), (0,3), (1,2), (1,3), (2,3)
@@ -233,13 +239,13 @@ __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
                 }
             }
         }
-        __syncthreads();
-        // Compute off-diagonal sum
-        off_diag_sum = (j > i) ? A[idx] * A[idx] : 0.0;
-        off_diag_sum = WarpReduce(temp_storage).Sum(off_diag_sum);
-        __syncwarp();
-        off_diag_sum = __shfl_sync(0xFFFFFFFF, off_diag_sum, 0);
-        __syncwarp();
+        // __syncwarp();
+        off_diag_sum =
+            A[0*4+1]*A[0*4+1]+A[0*4+2]*A[0*4+2]+A[0*4+3]*A[0*4+3]+
+            A[1*4+2]*A[1*4+2]+A[1*4+3]*A[1*4+3]+
+            A[2*4+3]*A[2*4+3];
+        // off_diag_sum = __shfl_sync(0xFFFFFFFF, off_diag_sum, 0);
+        // __syncwarp();
         // Check the number of iterations
         ++iteration;
         if (iteration > max_iteration) {
@@ -247,7 +253,7 @@ __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
             break;
         }
     }
-    __syncthreads();
+    // __syncthreads();
     // Sort
     double p;
     if (idx == 0) {
@@ -273,8 +279,30 @@ __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
             }
         }
     }
-    __syncthreads();
+    // __syncthreads();
     // Transpose
-    A_in[i*4+j] = V[j*4+i];
-    if (i == j) eigvals[i] = A[idx];
+    // A_in[i*4+j] = V[j*4+i];
+    // if (i == j) eigvals[i] = A[idx];
+    if (idx == 0) {
+        A_in[0] = V[0];
+        A_in[1] = V[4];
+        A_in[2] = V[8];
+        A_in[3] = V[12];
+        A_in[4] = V[1];
+        A_in[5] = V[5];
+        A_in[6] = V[9];
+        A_in[7] = V[13];
+        A_in[8] = V[2];
+        A_in[9] = V[6];
+        A_in[10] = V[10];
+        A_in[11] = V[14];
+        A_in[12] = V[3];
+        A_in[13] = V[7];
+        A_in[14] = V[11];
+        A_in[15] = V[15];
+        eigvals[0] = A[0*4+0];
+        eigvals[1] = A[1*4+1];
+        eigvals[2] = A[2*4+2];
+        eigvals[3] = A[3*4+3];
+    }
 }
