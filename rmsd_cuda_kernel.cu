@@ -67,9 +67,9 @@ __inline__ __device__ void apply_jacobi(
     }
     const double opp = A[p*4+p];
     const double oqq = A[q*4+q];
-    const double opq = A[p*4+q];
-    A[p*4+p] = c2 * opp + s2 * oqq - 2.0 * cs * opq;
-    A[q*4+q] = s2 * opp + c2 * oqq + 2.0 * cs * opq;
+    const double two_cs_opq = 2.0 * cs * A[p*4+q];
+    A[p*4+p] = c2 * opp + s2 * oqq - two_cs_opq;
+    A[q*4+q] = s2 * opp + c2 * oqq + two_cs_opq;
     A[p*4+q] = 0;
     A[q*4+p] = 0;
 }
@@ -112,6 +112,7 @@ __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
     while (off_diag_sum > 1e-16) {
         double c, s;
         // Apply Jacobi rotation
+#if 0
         #pragma unroll
         for (int i0 = 0; i0 < 4; ++i0) {
             for (int j0 = i0 + 1; j0 < 4; ++j0) {
@@ -122,7 +123,8 @@ __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
                         const double a_qq = A[j0*4+j0];
                         const double theta = 0.5 * (a_qq - a_pp) / a_pq;
                         const double sign = sgn(theta) == 0 ? 1.0 : sgn(theta);
-                        const double t = sign / (abs(theta) + sqrt(theta * theta + 1.0));
+                        // const double t = sign / (abs(theta) + sqrt(theta * theta + 1.0));
+                        const double t = sign * (sqrt(theta * theta + 1.0) - abs(theta));
                         c = rsqrt(t * t + 1.0);
                         s = t * c;
                         apply_jacobi(A, i0, j0, c, s);
@@ -131,7 +133,112 @@ __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
                 }
             }
         }
-        __syncthreads();
+#endif
+        if (idx == 1) {
+            const int p = 0;
+            const int q = 1;
+            const double a_pq = A[p*4+q];
+            if (abs(a_pq) > 0) {
+                const double a_pp = A[p*4+p];
+                const double a_qq = A[q*4+q];
+                const double theta = 0.5 * (a_qq - a_pp) / a_pq;
+                const double sign = sgn(theta) == 0 ? 1.0 : sgn(theta);
+                // const double t = sign / (abs(theta) + sqrt(theta * theta + 1.0));
+                const double t = sign * (sqrt(theta * theta + 1.0) - abs(theta));
+                c = rsqrt(t * t + 1.0);
+                s = t * c;
+                apply_jacobi(A, p, q, c, s);
+                multiply_jacobi(V, p, q, c, s);
+            }
+        }
+        if (idx == 11) {
+            const int p = 2;
+            const int q = 3;
+            const double a_pq = A[p*4+q];
+            if (abs(a_pq) > 0) {
+                const double a_pp = A[p*4+p];
+                const double a_qq = A[q*4+q];
+                const double theta = 0.5 * (a_qq - a_pp) / a_pq;
+                const double sign = sgn(theta) == 0 ? 1.0 : sgn(theta);
+                // const double t = sign / (abs(theta) + sqrt(theta * theta + 1.0));
+                const double t = sign * (sqrt(theta * theta + 1.0) - abs(theta));
+                c = rsqrt(t * t + 1.0);
+                s = t * c;
+                apply_jacobi(A, p, q, c, s);
+                multiply_jacobi(V, p, q, c, s);
+            }
+        }
+        __syncwarp();
+        if (idx == 2) {
+            const int p = 0;
+            const int q = 2;
+            const double a_pq = A[p*4+q];
+            if (abs(a_pq) > 0) {
+                const double a_pp = A[p*4+p];
+                const double a_qq = A[q*4+q];
+                const double theta = 0.5 * (a_qq - a_pp) / a_pq;
+                const double sign = sgn(theta) == 0 ? 1.0 : sgn(theta);
+                // const double t = sign / (abs(theta) + sqrt(theta * theta + 1.0));
+                const double t = sign * (sqrt(theta * theta + 1.0) - abs(theta));
+                c = rsqrt(t * t + 1.0);
+                s = t * c;
+                apply_jacobi(A, p, q, c, s);
+                multiply_jacobi(V, p, q, c, s);
+            }
+        }
+        if (idx == 7) {
+            const int p = 1;
+            const int q = 3;
+            const double a_pq = A[p*4+q];
+            if (abs(a_pq) > 0) {
+                const double a_pp = A[p*4+p];
+                const double a_qq = A[q*4+q];
+                const double theta = 0.5 * (a_qq - a_pp) / a_pq;
+                const double sign = sgn(theta) == 0 ? 1.0 : sgn(theta);
+                // const double t = sign / (abs(theta) + sqrt(theta * theta + 1.0));
+                const double t = sign * (sqrt(theta * theta + 1.0) - abs(theta));
+                c = rsqrt(t * t + 1.0);
+                s = t * c;
+                apply_jacobi(A, p, q, c, s);
+                multiply_jacobi(V, p, q, c, s);
+            }
+        }
+        __syncwarp();
+        if (idx == 3) {
+            const int p = 0;
+            const int q = 3;
+            const double a_pq = A[p*4+q];
+            if (abs(a_pq) > 0) {
+                const double a_pp = A[p*4+p];
+                const double a_qq = A[q*4+q];
+                const double theta = 0.5 * (a_qq - a_pp) / a_pq;
+                const double sign = sgn(theta) == 0 ? 1.0 : sgn(theta);
+                // const double t = sign / (abs(theta) + sqrt(theta * theta + 1.0));
+                const double t = sign * (sqrt(theta * theta + 1.0) - abs(theta));
+                c = rsqrt(t * t + 1.0);
+                s = t * c;
+                apply_jacobi(A, p, q, c, s);
+                multiply_jacobi(V, p, q, c, s);
+            }
+        }
+        if (idx == 6) {
+            const int p = 1;
+            const int q = 2;
+            const double a_pq = A[p*4+q];
+            if (abs(a_pq) > 0) {
+                const double a_pp = A[p*4+p];
+                const double a_qq = A[q*4+q];
+                const double theta = 0.5 * (a_qq - a_pp) / a_pq;
+                const double sign = sgn(theta) == 0 ? 1.0 : sgn(theta);
+                // const double t = sign / (abs(theta) + sqrt(theta * theta + 1.0));
+                const double t = sign * (sqrt(theta * theta + 1.0) - abs(theta));
+                c = rsqrt(t * t + 1.0);
+                s = t * c;
+                apply_jacobi(A, p, q, c, s);
+                multiply_jacobi(V, p, q, c, s);
+            }
+        }
+        __syncwarp();
         // Compute off-diagonal sum
         off_diag_sum = (j > i) ? A[idx] * A[idx] : 0.0;
         off_diag_sum = WarpReduce(temp_storage).Sum(off_diag_sum);
