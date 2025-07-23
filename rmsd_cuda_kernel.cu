@@ -113,20 +113,20 @@ __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
         double c, s;
         // Apply Jacobi rotation
         #pragma unroll
-        for (int i0 = 0; i0 < 4; ++i0) {
-            for (int j0 = i0 + 1; j0 < 4; ++j0) {
+        for (int p = 0; p < 4; ++p) {
+            for (int q = p + 1; q < 4; ++q) {
                 if (idx == 0) {
-                    const double a_pq = A[i0*4+j0];
+                    const double a_pq = A[p*4+q];
                     if (abs(a_pq) > 0) {
-                        const double a_pp = A[i0*4+i0];
-                        const double a_qq = A[j0*4+j0];
+                        const double a_pp = A[p*4+p];
+                        const double a_qq = A[q*4+q];
                         const double theta = 0.5 * (a_qq - a_pp) / a_pq;
                         const double sign = sgn(theta) == 0 ? 1.0 : sgn(theta);
-                        const double t = sign / (abs(theta) + sqrt(theta * theta + 1.0));
+                        const double t = sign * (sqrt(theta * theta + 1.0) - abs(theta));
                         c = rsqrt(t * t + 1.0);
                         s = t * c;
-                        apply_jacobi(A, i0, j0, c, s);
-                        multiply_jacobi(V, i0, j0, c, s);
+                        apply_jacobi(A, p, q, c, s);
+                        multiply_jacobi(V, p, q, c, s);
                     }
                 }
             }
