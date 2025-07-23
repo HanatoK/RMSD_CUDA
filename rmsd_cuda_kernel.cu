@@ -112,22 +112,124 @@ __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
     while (off_diag_sum > 1e-16) {
         double c, s;
         // Apply Jacobi rotation
-        #pragma unroll
-        for (int p = 0; p < 4; ++p) {
-            for (int q = p + 1; q < 4; ++q) {
-                if (idx == 0) {
-                    const double a_pq = A[p*4+q];
-                    if (abs(a_pq) > 0) {
-                        const double a_pp = A[p*4+p];
-                        const double a_qq = A[q*4+q];
-                        const double theta = 0.5 * (a_qq - a_pp) / a_pq;
-                        const double sign = sgn(theta) == 0 ? 1.0 : sgn(theta);
-                        const double t = sign * (sqrt(theta * theta + 1.0) - abs(theta));
-                        c = rsqrt(t * t + 1.0);
-                        s = t * c;
-                        apply_jacobi(A, p, q, c, s);
-                        multiply_jacobi(V, p, q, c, s);
-                    }
+        if (idx == 0) {
+            // #pragma unroll
+            // for (int p = 0; p < 4; ++p) {
+            //     for (int q = p + 1; q < 4; ++q) {
+            //         const double a_pq = A[p*4+q];
+            //         if (abs(a_pq) > 0) {
+            //             const double a_pp = A[p*4+p];
+            //             const double a_qq = A[q*4+q];
+            //             const double theta = 0.5 * (a_qq - a_pp) / a_pq;
+            //             const double sign = sgn(theta) == 0 ? 1.0 : sgn(theta);
+            //             const double t = sign * (sqrt(theta * theta + 1.0) - abs(theta));
+            //             c = rsqrt(t * t + 1.0);
+            //             s = t * c;
+            //             apply_jacobi(A, p, q, c, s);
+            //             multiply_jacobi(V, p, q, c, s);
+            //         }
+            //     }
+            // }
+            /// NOTE: There are different orders for accessing A:
+            /// (i)  (0,1), (2,3), (0,2), (1,3), (0,3), (1,2);
+            /// (ii) (0,1), (0,2), (0,3), (1,2), (1,3), (2,3)
+            /// It looks like (i) is slightly faster (5%-10%), possibly
+            /// because processing A(0,1) changes A(0,2) but not A(2,3),
+            /// so (i) might be more cache-friendly?
+            {
+                const int p = 0;
+                const int q = 1;
+                const double a_pq = A[p*4+q];
+                if (abs(a_pq) > 0) {
+                    const double a_pp = A[p*4+p];
+                    const double a_qq = A[q*4+q];
+                    const double theta = 0.5 * (a_qq - a_pp) / a_pq;
+                    const double sign = sgn(theta) == 0 ? 1.0 : sgn(theta);
+                    const double t = sign * (sqrt(theta * theta + 1.0) - abs(theta));
+                    c = rsqrt(t * t + 1.0);
+                    s = t * c;
+                    apply_jacobi(A, p, q, c, s);
+                    multiply_jacobi(V, p, q, c, s);
+                }
+            }
+            {
+                const int p = 2;
+                const int q = 3;
+                const double a_pq = A[p*4+q];
+                if (abs(a_pq) > 0) {
+                    const double a_pp = A[p*4+p];
+                    const double a_qq = A[q*4+q];
+                    const double theta = 0.5 * (a_qq - a_pp) / a_pq;
+                    const double sign = sgn(theta) == 0 ? 1.0 : sgn(theta);
+                    const double t = sign * (sqrt(theta * theta + 1.0) - abs(theta));
+                    c = rsqrt(t * t + 1.0);
+                    s = t * c;
+                    apply_jacobi(A, p, q, c, s);
+                    multiply_jacobi(V, p, q, c, s);
+                }
+            }
+            {
+                const int p = 0;
+                const int q = 2;
+                const double a_pq = A[p*4+q];
+                if (abs(a_pq) > 0) {
+                    const double a_pp = A[p*4+p];
+                    const double a_qq = A[q*4+q];
+                    const double theta = 0.5 * (a_qq - a_pp) / a_pq;
+                    const double sign = sgn(theta) == 0 ? 1.0 : sgn(theta);
+                    const double t = sign * (sqrt(theta * theta + 1.0) - abs(theta));
+                    c = rsqrt(t * t + 1.0);
+                    s = t * c;
+                    apply_jacobi(A, p, q, c, s);
+                    multiply_jacobi(V, p, q, c, s);
+                }
+            }
+            {
+                const int p = 1;
+                const int q = 3;
+                const double a_pq = A[p*4+q];
+                if (abs(a_pq) > 0) {
+                    const double a_pp = A[p*4+p];
+                    const double a_qq = A[q*4+q];
+                    const double theta = 0.5 * (a_qq - a_pp) / a_pq;
+                    const double sign = sgn(theta) == 0 ? 1.0 : sgn(theta);
+                    const double t = sign * (sqrt(theta * theta + 1.0) - abs(theta));
+                    c = rsqrt(t * t + 1.0);
+                    s = t * c;
+                    apply_jacobi(A, p, q, c, s);
+                    multiply_jacobi(V, p, q, c, s);
+                }
+            }
+            {
+                const int p = 0;
+                const int q = 3;
+                const double a_pq = A[p*4+q];
+                if (abs(a_pq) > 0) {
+                    const double a_pp = A[p*4+p];
+                    const double a_qq = A[q*4+q];
+                    const double theta = 0.5 * (a_qq - a_pp) / a_pq;
+                    const double sign = sgn(theta) == 0 ? 1.0 : sgn(theta);
+                    const double t = sign * (sqrt(theta * theta + 1.0) - abs(theta));
+                    c = rsqrt(t * t + 1.0);
+                    s = t * c;
+                    apply_jacobi(A, p, q, c, s);
+                    multiply_jacobi(V, p, q, c, s);
+                }
+            }
+            {
+                const int p = 1;
+                const int q = 2;
+                const double a_pq = A[p*4+q];
+                if (abs(a_pq) > 0) {
+                    const double a_pp = A[p*4+p];
+                    const double a_qq = A[q*4+q];
+                    const double theta = 0.5 * (a_qq - a_pp) / a_pq;
+                    const double sign = sgn(theta) == 0 ? 1.0 : sgn(theta);
+                    const double t = sign * (sqrt(theta * theta + 1.0) - abs(theta));
+                    c = rsqrt(t * t + 1.0);
+                    s = t * c;
+                    apply_jacobi(A, p, q, c, s);
+                    multiply_jacobi(V, p, q, c, s);
                 }
             }
         }
