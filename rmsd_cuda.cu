@@ -204,7 +204,7 @@ void OptimalRotation::calculateOptimalRotationMatrix() {
             &m_device_eigenvectors, &m_device_eigenvalues, &max_reached};
         kernelNodeParams.func           = (void*)jacobi_4x4;
         kernelNodeParams.gridDim        = dim3(1, 1, 1);
-        kernelNodeParams.blockDim       = dim3(16, 1, 1);
+        kernelNodeParams.blockDim       = dim3(1, 1, 1);
         kernelNodeParams.sharedMemBytes = 0;
         kernelNodeParams.kernelParams   =
             const_cast<void**>(kernelArgs);
@@ -214,7 +214,7 @@ void OptimalRotation::calculateOptimalRotationMatrix() {
     }
     // getLastCudaError("Line 312\n");
 #else
-    jacobi_4x4<<<1,16,0,m_stream>>>(m_device_eigenvectors, m_device_eigenvalues, max_reached);
+    jacobi_4x4<<<1,1,0,m_stream>>>(m_device_eigenvectors, m_device_eigenvalues, max_reached);
     if (max_reached[0] > 0) {
         std::cerr << "Maximum number of iterations reached!\n";
     }
