@@ -117,15 +117,17 @@ __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
             for (int j0 = i0 + 1; j0 < 4; ++j0) {
                 if (idx == 0) {
                     const double a_pq = A[i0*4+j0];
-                    const double a_pp = A[i0*4+i0];
-                    const double a_qq = A[j0*4+j0];
-                    const double theta = 0.5 * (a_qq - a_pp) / a_pq;
-                    const double sign = sgn(theta) == 0 ? 1.0 : sgn(theta);
-                    const double t = sign / (abs(theta) + sqrt(theta * theta + 1.0));
-                    c = rsqrt(t * t + 1.0);
-                    s = t * c;
-                    apply_jacobi(A, i0, j0, c, s);
-                    multiply_jacobi(V, i0, j0, c, s);
+                    if (abs(a_pq) > 0) {
+                        const double a_pp = A[i0*4+i0];
+                        const double a_qq = A[j0*4+j0];
+                        const double theta = 0.5 * (a_qq - a_pp) / a_pq;
+                        const double sign = sgn(theta) == 0 ? 1.0 : sgn(theta);
+                        const double t = sign / (abs(theta) + sqrt(theta * theta + 1.0));
+                        c = rsqrt(t * t + 1.0);
+                        s = t * c;
+                        apply_jacobi(A, i0, j0, c, s);
+                        multiply_jacobi(V, i0, j0, c, s);
+                    }
                 }
             }
         }
