@@ -91,7 +91,7 @@ __inline__ __device__ void compute_c_s(double a_pq, double a_pp, double a_qq, do
     // sincos(phi, &s, &c);
 }
 
-// Use exactly 1 threads
+// Use exactly 2 threads
 __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
     __shared__ double A[4*4];
     __shared__ double V[4*4];
