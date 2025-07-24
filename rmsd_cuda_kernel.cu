@@ -263,7 +263,7 @@ __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
             k = i0;
             p = A[i0*4+i0];
             for (int j0 = i0 + 1; j0 < 4; ++j0) {
-                if (A[j0*4+j0] <= p) {
+                if (A[j0*4+j0] < p) {
                     k = j0;
                     p = A[j0*4+j0];
                 }
