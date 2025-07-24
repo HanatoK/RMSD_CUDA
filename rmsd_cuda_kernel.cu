@@ -43,10 +43,6 @@ __global__ void rotate_atoms_kernel(double3* atom_positions, const double* rotat
     }
 }
 
-template <typename T> __inline__ __device__ int sgn(T val) {
-  return (T(0) < val) - (val < T(0));
-}
-
 __inline__ __device__ void apply_jacobi(
     // const double* __restrict old_A,
     double* __restrict A,
@@ -150,10 +146,9 @@ __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
                     const double a_pp = A[p*4+p];
                     const double a_qq = A[q*4+q];
                     const double theta = 0.5 * (a_qq - a_pp) / a_pq;
-                    const double sign = sgn(theta) == 0 ? 1.0 : sgn(theta);
-                    const double t = sign * (sqrt(theta * theta + 1.0) - abs(theta));
+                    const double t = 1 / (sqrt(theta * theta + 1.0) + abs(theta));
                     c = rsqrt(t * t + 1.0);
-                    s = t * c;
+                    s = theta < 0 ? -t * c : t * c;
                     apply_jacobi(A, p, q, c, s);
                     multiply_jacobi(V, p, q, c, s);
                 }
@@ -166,10 +161,9 @@ __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
                     const double a_pp = A[p*4+p];
                     const double a_qq = A[q*4+q];
                     const double theta = 0.5 * (a_qq - a_pp) / a_pq;
-                    const double sign = sgn(theta) == 0 ? 1.0 : sgn(theta);
-                    const double t = sign * (sqrt(theta * theta + 1.0) - abs(theta));
+                    const double t = 1 / (sqrt(theta * theta + 1.0) + abs(theta));
                     c = rsqrt(t * t + 1.0);
-                    s = t * c;
+                    s = theta < 0 ? -t * c : t * c;
                     apply_jacobi(A, p, q, c, s);
                     multiply_jacobi(V, p, q, c, s);
                 }
@@ -182,10 +176,9 @@ __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
                     const double a_pp = A[p*4+p];
                     const double a_qq = A[q*4+q];
                     const double theta = 0.5 * (a_qq - a_pp) / a_pq;
-                    const double sign = sgn(theta) == 0 ? 1.0 : sgn(theta);
-                    const double t = sign * (sqrt(theta * theta + 1.0) - abs(theta));
+                    const double t = 1 / (sqrt(theta * theta + 1.0) + abs(theta));
                     c = rsqrt(t * t + 1.0);
-                    s = t * c;
+                    s = theta < 0 ? -t * c : t * c;
                     apply_jacobi(A, p, q, c, s);
                     multiply_jacobi(V, p, q, c, s);
                 }
@@ -198,10 +191,9 @@ __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
                     const double a_pp = A[p*4+p];
                     const double a_qq = A[q*4+q];
                     const double theta = 0.5 * (a_qq - a_pp) / a_pq;
-                    const double sign = sgn(theta) == 0 ? 1.0 : sgn(theta);
-                    const double t = sign * (sqrt(theta * theta + 1.0) - abs(theta));
+                    const double t = 1 / (sqrt(theta * theta + 1.0) + abs(theta));
                     c = rsqrt(t * t + 1.0);
-                    s = t * c;
+                    s = theta < 0 ? -t * c : t * c;
                     apply_jacobi(A, p, q, c, s);
                     multiply_jacobi(V, p, q, c, s);
                 }
@@ -214,10 +206,9 @@ __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
                     const double a_pp = A[p*4+p];
                     const double a_qq = A[q*4+q];
                     const double theta = 0.5 * (a_qq - a_pp) / a_pq;
-                    const double sign = sgn(theta) == 0 ? 1.0 : sgn(theta);
-                    const double t = sign * (sqrt(theta * theta + 1.0) - abs(theta));
+                    const double t = 1 / (sqrt(theta * theta + 1.0) + abs(theta));
                     c = rsqrt(t * t + 1.0);
-                    s = t * c;
+                    s = theta < 0 ? -t * c : t * c;
                     apply_jacobi(A, p, q, c, s);
                     multiply_jacobi(V, p, q, c, s);
                 }
@@ -230,10 +221,9 @@ __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
                     const double a_pp = A[p*4+p];
                     const double a_qq = A[q*4+q];
                     const double theta = 0.5 * (a_qq - a_pp) / a_pq;
-                    const double sign = sgn(theta) == 0 ? 1.0 : sgn(theta);
-                    const double t = sign * (sqrt(theta * theta + 1.0) - abs(theta));
+                    const double t = 1 / (sqrt(theta * theta + 1.0) + abs(theta));
                     c = rsqrt(t * t + 1.0);
-                    s = t * c;
+                    s = theta < 0 ? -t * c : t * c;
                     apply_jacobi(A, p, q, c, s);
                     multiply_jacobi(V, p, q, c, s);
                 }
