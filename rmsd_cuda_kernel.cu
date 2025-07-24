@@ -84,6 +84,7 @@ __inline__ __device__ void multiply_jacobi(
 __inline__ __device__ void compute_c_s(double a_pq, double a_pp, double a_qq, double& c, double& s) {
     const double theta = 0.5 * (a_qq - a_pp) / a_pq;
     const double t = 1 / (sqrt(theta * theta + 1.0) + fabs(theta));
+    // const double t = sqrt(theta * theta + 1.0) - fabs(theta);
     c = rsqrt(t * t + 1.0);
     s = theta < 0 ? -t * c : t * c;
     // const double phi = 0.5 * atan2(2 * a_pq, a_qq - a_pp);
@@ -92,8 +93,8 @@ __inline__ __device__ void compute_c_s(double a_pq, double a_pp, double a_qq, do
 
 // Use exactly 1 threads
 __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
-    double A[4*4];
-    double V[4*4] = {0};
+    __shared__ double A[4*4];
+    __shared__ double V[4*4];
     const int idx = threadIdx.x;
     // const int i = idx / 4;
     // const int j = idx % 4;
@@ -104,6 +105,8 @@ __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
     if (idx == 0) {
         // V[idx] = double(i == j);
         // A[idx] = A_in[idx];
+        memset(V, 0, sizeof(double)*4*4);
+        // __threadfence();
         V[0*4+0] = 1;
         V[1*4+1] = 1;
         V[2*4+2] = 1;
@@ -127,8 +130,9 @@ __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
         A[15] = A_in[15];
         // __threadfence();
     }
-    // __syncthreads();
-    // printf("(in) idx = %d, A[%d] = %12.7f\n", idx, idx, A[idx]);
+    __syncthreads();
+    const int p_ids[] = {0, 2, 0, 1, 0, 1};
+    const int q_ids[] = {1, 3, 2, 3, 3, 2};
     const int max_iteration = 50;
     double off_diag_sum =
         A[0*4+1]*A[0*4+1]+A[0*4+2]*A[0*4+2]+A[0*4+3]*A[0*4+3]+
@@ -138,100 +142,74 @@ __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
     // __syncwarp();
     int iteration = 0;
     while (off_diag_sum > 1e-16) {
-        // Apply Jacobi rotation
-        if (idx == 0) {
-            /// NOTE: There are different orders for accessing A:
-            /// (i)  (0,1), (2,3), (0,2), (1,3), (0,3), (1,2);
-            /// (ii) (0,1), (0,2), (0,3), (1,2), (1,3), (2,3)
-            /// It looks like (i) is slightly faster (5%-10%), possibly
-            /// because processing A(0,1) changes A(0,2) but not A(2,3),
-            /// so (i) might be more cache-friendly?
-            {
-                double c, s;
-                const int p = 0;
-                const int q = 1;
-                const double a_pq = A[p*4+q];
-                if (fabs(a_pq) > 0) {
-                    const double a_pp = A[p*4+p];
-                    const double a_qq = A[q*4+q];
-                    compute_c_s(a_pq, a_pp, a_qq, c, s);
-                    apply_jacobi(A, p, q, c, s);
-                    multiply_jacobi(V, p, q, c, s);
-                }
-            }
-            {
-                double c, s;
-                const int p = 2;
-                const int q = 3;
-                const double a_pq = A[p*4+q];
-                if (fabs(a_pq) > 0) {
-                    const double a_pp = A[p*4+p];
-                    const double a_qq = A[q*4+q];
-                    compute_c_s(a_pq, a_pp, a_qq, c, s);
-                    apply_jacobi(A, p, q, c, s);
-                    multiply_jacobi(V, p, q, c, s);
-                }
-            }
-            {
-                double c, s;
-                const int p = 0;
-                const int q = 2;
-                const double a_pq = A[p*4+q];
-                if (fabs(a_pq) > 0) {
-                    const double a_pp = A[p*4+p];
-                    const double a_qq = A[q*4+q];
-                    compute_c_s(a_pq, a_pp, a_qq, c, s);
-                    apply_jacobi(A, p, q, c, s);
-                    multiply_jacobi(V, p, q, c, s);
-                }
-            }
-            {
-                double c, s;
-                const int p = 1;
-                const int q = 3;
-                const double a_pq = A[p*4+q];
-                if (fabs(a_pq) > 0) {
-                    const double a_pp = A[p*4+p];
-                    const double a_qq = A[q*4+q];
-                    compute_c_s(a_pq, a_pp, a_qq, c, s);
-                    apply_jacobi(A, p, q, c, s);
-                    multiply_jacobi(V, p, q, c, s);
-                }
-            }
-            {
-                double c, s;
-                const int p = 0;
-                const int q = 3;
-                const double a_pq = A[p*4+q];
-                if (fabs(a_pq) > 0) {
-                    const double a_pp = A[p*4+p];
-                    const double a_qq = A[q*4+q];
-                    compute_c_s(a_pq, a_pp, a_qq, c, s);
-                    apply_jacobi(A, p, q, c, s);
-                    multiply_jacobi(V, p, q, c, s);
-                }
-            }
-            {
-                double c, s;
-                const int p = 1;
-                const int q = 2;
-                const double a_pq = A[p*4+q];
-                if (fabs(a_pq) > 0) {
-                    const double a_pp = A[p*4+p];
-                    const double a_qq = A[q*4+q];
-                    compute_c_s(a_pq, a_pp, a_qq, c, s);
-                    apply_jacobi(A, p, q, c, s);
-                    multiply_jacobi(V, p, q, c, s);
-                }
-            }
+        double c = 0, s = 0;
+        bool rotate = false;
+        int p = p_ids[idx];
+        int q = q_ids[idx];
+        double a_pq = A[p*4+q];
+        if (fabs(a_pq) > 0) {
+            rotate = true;
+            const double a_pp = A[p*4+p];
+            const double a_qq = A[q*4+q];
+            compute_c_s(a_pq, a_pp, a_qq, c, s);
         }
-        // __syncwarp();
+        __syncwarp();
+        if (idx == 0 && rotate) {
+            apply_jacobi(A, 0, 1, c, s);
+            multiply_jacobi(V, 0, 1, c, s);
+        }
+        __syncwarp();
+        if (idx == 1 && rotate) {
+            apply_jacobi(A, 2, 3, c, s);
+            multiply_jacobi(V, 2, 3, c, s);
+        }
+        __syncwarp();
+        rotate = false;
+        p = p_ids[idx+2];
+        q = q_ids[idx+2];
+        a_pq = A[p*4+q];
+        if (fabs(a_pq) > 0) {
+            rotate = true;
+            const double a_pp = A[p*4+p];
+            const double a_qq = A[q*4+q];
+            compute_c_s(a_pq, a_pp, a_qq, c, s);
+        }
+        __syncwarp();
+        if (idx == 0 && rotate) {
+            apply_jacobi(A, 0, 2, c, s);
+            multiply_jacobi(V, 0, 2, c, s);
+        }
+        __syncwarp();
+        if (idx == 1 && rotate) {
+            apply_jacobi(A, 1, 3, c, s);
+            multiply_jacobi(V, 1, 3, c, s);
+        }
+        __syncwarp();
+        rotate = false;
+        p = p_ids[idx+4];
+        q = q_ids[idx+4];
+        a_pq = A[p*4+q];
+        if (fabs(a_pq) > 0) {
+            rotate = true;
+            const double a_pp = A[p*4+p];
+            const double a_qq = A[q*4+q];
+            compute_c_s(a_pq, a_pp, a_qq, c, s);
+        }
+        __syncwarp();
+        if (idx == 0 && rotate) {
+            apply_jacobi(A, 0, 3, c, s);
+            multiply_jacobi(V, 0, 3, c, s);
+        }
+        __syncwarp();
+        if (idx == 1 && rotate) {
+            apply_jacobi(A, 1, 2, c, s);
+            multiply_jacobi(V, 1, 2, c, s);
+        }
+        __syncwarp();
         off_diag_sum =
             A[0*4+1]*A[0*4+1]+A[0*4+2]*A[0*4+2]+A[0*4+3]*A[0*4+3]+
             A[1*4+2]*A[1*4+2]+A[1*4+3]*A[1*4+3]+
             A[2*4+3]*A[2*4+3];
-        // off_diag_sum = __shfl_sync(0xFFFFFFFF, off_diag_sum, 0);
-        // __syncwarp();
         // Check the number of iterations
         ++iteration;
         if (iteration > max_iteration) {
