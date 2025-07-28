@@ -89,7 +89,17 @@ public:
     void updateReference(const host_vector<AtomPosition>& reference_positions);
     void updateAtoms(const host_vector<AtomPosition>& atom_positions);
 //     void bringToCenterHost(AtomPosition* atom_positions, const size_t num_atoms) const;
+#if defined (USE_CUDA_GRAPH)
+    void bringToCenterDevice(
+      AtomPosition* device_atom_positions,
+      const size_t num_atoms,
+      AtomPosition* center_out,
+      unsigned int* counter,
+      std::vector<cudaGraphNode_t> dependencies,
+      cudaGraphNode_t& last_node);
+#else
     void bringToCenterDevice(AtomPosition* device_atom_positions, const size_t num_atoms);
+#endif
     void calculateOptimalRotationMatrix(); // main computing function
 //     void rotate(AtomPosition* atom_positions, const size_t num_atoms);
 #if defined (USE_CUDA_GRAPH)
@@ -112,7 +122,12 @@ private:
     // block size of all CUDA kernels
     static const int block_size = 128;
     // buffer for compute center
+#if defined (USE_CUDA_GRAPH)
+    AtomPosition* m_center_tmp_ref;
+    AtomPosition* m_center_tmp_pos;
+#else
     AtomPosition* m_center_tmp;
+#endif
     // CUDA eigensolver
     cusolverDnHandle_t cusolverH;
     cusolverEigMode_t jobz;
@@ -125,6 +140,10 @@ private:
     // RMSD result
     double* m_host_rmsd;
     double* m_device_rmsd;
+#if defined (USE_CUDA_GRAPH)
+    unsigned int* d_count_ref;
+    unsigned int* d_count_pos;
+#endif
     unsigned int* d_count;
 #if defined (USE_NR)
     int* max_reached;
@@ -133,7 +152,16 @@ private:
 #if defined (USE_CUDA_GRAPH)
     cudaGraph_t m_graph;
     cudaGraphExec_t m_instance;
-    cudaGraphNode_t last_node;
+    // cudaGraphNode_t last_node;
+    struct {
+      cudaGraphNode_t updateReferenceNode;
+      cudaGraphNode_t updateAtomsNode;
+      cudaGraphNode_t centerReferenceNode;
+      cudaGraphNode_t centerAtomsNode;
+      cudaGraphNode_t buildMatrixFNode;
+      cudaGraphNode_t jacobi4x4Node;
+      cudaGraphNode_t buildRotationMatrixKernelNode;
+    } gpu_nodes;
     bool graphCreated;
 #endif
 };

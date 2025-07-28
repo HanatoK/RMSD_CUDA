@@ -3,6 +3,72 @@
 #include <cusolverDn.h>
 #include <iostream>
 
+template <typename T>
+void add_copy_node(
+  const T* src, T* dst, size_t num_elements,
+  cudaMemcpyKind kind, cudaGraphNode_t& node_out, cudaGraph_t& graph,
+  std::vector<cudaGraphNode_t> dependencies) {
+  cudaMemcpy3DParms    memcpyParams     = {0};
+  memcpyParams.kind     = kind;
+  memcpyParams.srcArray = NULL;
+  memcpyParams.srcPos   = make_cudaPos(0, 0, 0);
+  memcpyParams.srcPtr   = make_cudaPitchedPtr(
+    (void*)src, sizeof(T) * num_elements, num_elements, 1);
+  memcpyParams.dstArray = NULL;
+  memcpyParams.dstPos   = make_cudaPos(0, 0, 0);
+  memcpyParams.dstPtr   = make_cudaPitchedPtr(
+    (void*)dst, sizeof(T) * num_elements, num_elements, 1);
+  memcpyParams.extent   = make_cudaExtent(sizeof(T) * num_elements, 1, 1);
+  checkCudaErrors(
+    cudaGraphAddMemcpyNode(
+      &node_out, graph, dependencies.data(),
+      dependencies.size(), &memcpyParams));
+}
+
+template <typename T>
+void update_copy_node(
+  const T* src, T* dst, size_t num_elements,
+  cudaMemcpyKind kind, cudaGraphNode_t& node,
+  cudaGraphExec_t& graph_exec) {
+  cudaMemcpy3DParms    memcpyParams     = {0};
+  memcpyParams.kind     = kind;
+  memcpyParams.srcArray = NULL;
+  memcpyParams.srcPos   = make_cudaPos(0, 0, 0);
+  memcpyParams.srcPtr   = make_cudaPitchedPtr(
+    (void*)src, sizeof(T) * num_elements, num_elements, 1);
+  memcpyParams.dstArray = NULL;
+  memcpyParams.dstPos   = make_cudaPos(0, 0, 0);
+  memcpyParams.dstPtr   = make_cudaPitchedPtr(
+    (void*)dst, sizeof(T) * num_elements, num_elements, 1);
+  memcpyParams.extent   = make_cudaExtent(sizeof(T) * num_elements, 1, 1);
+  checkCudaErrors(cudaGraphExecMemcpyNodeSetParams(
+    graph_exec, node,
+    &memcpyParams));
+}
+
+template <typename T>
+void add_clear_array_node(
+  T* dst, const size_t num_elements,
+  cudaGraphNode_t& node_out, cudaGraph_t& graph,
+  const std::vector<cudaGraphNode_t>& dependencies) {
+  // size_t elementSize, width;
+  const size_t sizeofT = sizeof(T);
+  /**< Size of each element in bytes. Must be 1, 2, or 4. */
+  const size_t elementSize =
+    (sizeofT % 4 == 0) ? 4 :
+    ((sizeofT % 2 == 0) ? 2 : 1);
+  const size_t width = num_elements * (sizeofT / elementSize);
+  cudaMemsetParams memsetParams = {0};
+  memsetParams.dst         = (void*)dst;
+  memsetParams.value       = 0;
+  memsetParams.elementSize = elementSize;
+  memsetParams.width       = width;
+  memsetParams.height      = 1;
+  checkCudaErrors(cudaGraphAddMemsetNode(
+    &node_out, graph, dependencies.data(),
+    dependencies.size(), &memsetParams));
+}
+
 bool isDevicePointer(const void* ptr) {
     bool is_device_pointer = true;
     cudaPointerAttributes attributes;
@@ -22,11 +88,12 @@ bool isDevicePointer(const void* ptr) {
 
 OptimalRotation::OptimalRotation(const size_t num_atoms)
 #if defined (USE_CUDA_GRAPH)
-    : last_node(NULL), graphCreated(false)
+    : graphCreated(false)
 #endif
 {
     checkCudaErrors(cudaStreamCreate(&m_stream));
 #if defined(USE_CUDA_GRAPH)
+    std::memset(&gpu_nodes, 0, sizeof(gpu_nodes));
     checkCudaErrors(cudaGraphCreate(&m_graph, 0));
     m_instance = NULL;
 #endif
@@ -37,7 +104,12 @@ OptimalRotation::OptimalRotation(const size_t num_atoms)
     checkCudaErrors(cudaMalloc(&m_device_rotation_matrix, 3 * 3 * sizeof(double)));
     checkCudaErrors(cudaMalloc(&m_device_eigenvalues, 4 * sizeof(double)));
     checkCudaErrors(cudaMalloc(&m_device_eigenvectors, 4 * 4 * sizeof(double)));
+#if defined (USE_CUDA_GRAPH)
+    checkCudaErrors(cudaMalloc(&m_center_tmp_ref, sizeof(AtomPosition)));
+    checkCudaErrors(cudaMalloc(&m_center_tmp_pos, sizeof(AtomPosition)));
+#else
     checkCudaErrors(cudaMalloc(&m_center_tmp, sizeof(AtomPosition)));
+#endif // USE_CUDA_GRAPH
     checkCudaErrors(cudaMalloc(&m_device_rmsd, 1 * sizeof(double)));
 #if !defined (USE_NR)
     // initialize the buffer of CUDA eigen solver
@@ -59,6 +131,10 @@ OptimalRotation::OptimalRotation(const size_t num_atoms)
 #endif // !defined (USE_NR)
 // #if defined(USE_CUDA_GRAPH)
     checkCudaErrors(cudaMallocHost(&m_host_rmsd, 1 * sizeof(double)));
+#if defined (USE_CUDA_GRAPH)
+    checkCudaErrors(cudaMalloc(&d_count_ref, 1 * sizeof(unsigned int)));
+    checkCudaErrors(cudaMalloc(&d_count_pos, 1 * sizeof(unsigned int)));
+#endif
     checkCudaErrors(cudaMalloc(&d_count, 1 * sizeof(unsigned int)));
     // cudaMemsetAsync(d_count, 0, 1 * sizeof(unsigned int), m_stream);
     mEventAttrib.version = NVTX_VERSION;
@@ -78,64 +154,111 @@ OptimalRotation::OptimalRotation(const size_t num_atoms)
 }
 
 void OptimalRotation::updateReference(const host_vector<AtomPosition>& reference_positions) {
+#if defined (USE_CUDA_GRAPH)
+    if (graphCreated == false) {
+        add_copy_node(
+            reference_positions.data(),
+            m_device_reference_positions,
+            m_num_atoms, cudaMemcpyHostToDevice,
+            gpu_nodes.updateReferenceNode, m_graph, {});
+        bringToCenterDevice(
+            m_device_reference_positions, m_num_atoms,
+            m_center_tmp_ref, d_count_ref,
+            {gpu_nodes.updateReferenceNode},
+            gpu_nodes.centerReferenceNode);
+    } else {
+        update_copy_node(
+            reference_positions.data(),
+            m_device_reference_positions,
+            m_num_atoms, cudaMemcpyHostToDevice,
+            gpu_nodes.updateReferenceNode, m_instance);
+    }
+#else
     checkCudaErrors(cudaMemcpyAsync(m_device_reference_positions, reference_positions.data(), m_num_atoms * sizeof(AtomPosition), cudaMemcpyHostToDevice, m_stream));
     bringToCenterDevice(m_device_reference_positions, m_num_atoms);
     // cudaStreamSynchronize(m_stream);
+#endif
 }
 
 void OptimalRotation::updateAtoms(const host_vector<AtomPosition>& atom_positions) {
+#if defined (USE_CUDA_GRAPH)
+    if (graphCreated == false) {
+        add_copy_node(
+            atom_positions.data(),
+            m_device_atom_positions,
+            m_num_atoms, cudaMemcpyHostToDevice,
+            gpu_nodes.updateAtomsNode, m_graph, {});
+        bringToCenterDevice(
+            m_device_atom_positions, m_num_atoms,
+            m_center_tmp_pos, d_count_pos,
+            {gpu_nodes.updateAtomsNode},
+            gpu_nodes.centerAtomsNode);
+    } else {
+        update_copy_node(
+            atom_positions.data(),
+            m_device_atom_positions,
+            m_num_atoms, cudaMemcpyHostToDevice,
+            gpu_nodes.updateAtomsNode, m_instance);
+    }
+#else
     checkCudaErrors(cudaMemcpyAsync(m_device_atom_positions, atom_positions.data(), m_num_atoms * sizeof(AtomPosition), cudaMemcpyHostToDevice, m_stream));
     bringToCenterDevice(m_device_atom_positions, m_num_atoms);
     // cudaStreamSynchronize(m_stream);
+#endif
 }
 
-void OptimalRotation::bringToCenterDevice(AtomPosition* device_atom_positions, const size_t num_atoms) {
+void OptimalRotation::bringToCenterDevice(AtomPosition* device_atom_positions, const size_t num_atoms
+#if defined(USE_CUDA_GRAPH)
+, AtomPosition* center_out,
+unsigned int* counter,
+std::vector<cudaGraphNode_t> dependencies,
+cudaGraphNode_t& last_node
+#endif
+) {
     // const int num_blocks = int(std::ceil(double(m_num_atoms) / block_size));
     const int num_blocks = (m_num_atoms + block_size - 1) / block_size;
 #if defined(USE_CUDA_GRAPH)
     if (graphCreated == false) {
-        cudaGraphNode_t counterSetNode, centerSetNode, getCenterKernelNode, moveToCenterKernel;
-        cudaMemsetParams memsetParams = {0};
-        memsetParams.dst            = d_count;
-        memsetParams.value          = 0;
-        memsetParams.elementSize    = 1 * sizeof(unsigned int);
-        memsetParams.width          = 1;
-        memsetParams.height         = 1;
-        if (last_node == nullptr) {
-            checkCudaErrors(cudaGraphAddMemsetNode(&counterSetNode, m_graph, NULL, 0, &memsetParams));
-        } else {
-            checkCudaErrors(cudaGraphAddMemsetNode(&counterSetNode, m_graph, &last_node, 1, &memsetParams));
-        }
-        // checkCudaErrors(cudaGraphAddMemsetNode(&counterSetNode, m_graph, NULL, 0, &memsetParams));
-        // last_node = counterSetNode;
-        memsetParams.dst            = m_center_tmp;
-        memsetParams.elementSize    = sizeof(float);
-        memsetParams.width          = 1 * sizeof(AtomPosition) / memsetParams.elementSize;
-        if (last_node == nullptr) {
-            checkCudaErrors(cudaGraphAddMemsetNode(&centerSetNode, m_graph, NULL, 0, &memsetParams));
-        } else {
-            checkCudaErrors(cudaGraphAddMemsetNode(&centerSetNode, m_graph, &last_node, 1, &memsetParams));
-        }
-        // last_node = centerSetNode;
+        cudaGraphNode_t counterSetNode;
+        cudaGraphNode_t centerSetNode;
+        cudaGraphNode_t getCenterKernelNode;
+        cudaGraphNode_t moveToCenterKernelNode;
+        // cudaMemsetParams memsetParams = {0};
+        // memsetParams.dst            = d_count;
+        // memsetParams.value          = 0;
+        // memsetParams.elementSize    = 1 * sizeof(unsigned int);
+        // memsetParams.width          = 1;
+        // memsetParams.height         = 1;
+        // checkCudaErrors(cudaGraphAddMemsetNode(&counterSetNode, m_graph, dependencies.data(), dependencies.size(), &memsetParams));
+        // memsetParams.dst            = m_center_tmp;
+        // memsetParams.elementSize    = sizeof(float);
+        // memsetParams.width          = 1 * sizeof(AtomPosition) / memsetParams.elementSize;
+        // checkCudaErrors(cudaGraphAddMemsetNode(&centerSetNode, m_graph, dependencies.data(), dependencies.size(), &memsetParams));
+        add_clear_array_node(counter, 1, counterSetNode, m_graph, {});
+        add_clear_array_node(center_out, 1, centerSetNode, m_graph, {});
         // Run kernels
         cudaKernelNodeParams kernelNodeParams = {0};
-        cudaGraphNode_t dependencies[] = {counterSetNode, centerSetNode};
+        // cudaGraphNode_t dependencies[] = {
+        //     counterSetNode,
+        //     centerSetNode};
+        dependencies.push_back(counterSetNode);
+        dependencies.push_back(centerSetNode);
         const void *getCenterKernelArgs[] =
-            {&device_atom_positions, &m_center_tmp, &num_atoms, &d_count};
+            {&device_atom_positions, &center_out, &num_atoms, &counter};
         kernelNodeParams.func           = (void*)get_center_kernel<block_size>;
         kernelNodeParams.gridDim        = dim3(num_blocks, 1, 1);
         kernelNodeParams.blockDim       = dim3(block_size, 1, 1);
         kernelNodeParams.sharedMemBytes = 0;
         kernelNodeParams.kernelParams   = const_cast<void**>(getCenterKernelArgs);
         kernelNodeParams.extra          = NULL;
-        checkCudaErrors(cudaGraphAddKernelNode(&getCenterKernelNode, m_graph, dependencies, 2, &kernelNodeParams));
-        last_node = getCenterKernelNode;
+        checkCudaErrors(cudaGraphAddKernelNode(&getCenterKernelNode, m_graph, dependencies.data(), dependencies.size(), &kernelNodeParams));
+        // last_node = getCenterKernelNode;
         const void* moveAtomToCenterKernelArgs[] =
-            {&device_atom_positions, &m_center_tmp, &num_atoms};
+            {&device_atom_positions, &center_out, &num_atoms};
         kernelNodeParams.func           = (void*)move_atom_to_center_kernel;
         kernelNodeParams.kernelParams   = const_cast<void**>(moveAtomToCenterKernelArgs);
-        checkCudaErrors(cudaGraphAddKernelNode(&moveToCenterKernel, m_graph, &last_node, 1, &kernelNodeParams));
-        last_node = moveToCenterKernel;
+        checkCudaErrors(cudaGraphAddKernelNode(&moveToCenterKernelNode, m_graph, &getCenterKernelNode, 1, &kernelNodeParams));
+        last_node = moveToCenterKernelNode;
     }
 #else
     checkCudaErrors(cudaMemsetAsync(m_center_tmp, 0, sizeof(double3), m_stream));
@@ -155,24 +278,21 @@ void OptimalRotation::calculateOptimalRotationMatrix() {
     if (graphCreated == false) {
         // Memsets
         cudaGraphNode_t counterSetNode, eigenVectorsSetNode;
-        cudaMemsetParams memsetParams = {0};
-        memsetParams.dst            = d_count;
-        memsetParams.value          = 0;
-        memsetParams.elementSize    = 1 * sizeof(unsigned int);
-        memsetParams.width          = 1;
-        memsetParams.height         = 1;
-        cudaGraphAddMemsetNode(
-            &counterSetNode, m_graph, &last_node, 1, &memsetParams);
-        // last_node = counterSetNode;
-        memsetParams.dst            = m_device_eigenvectors;
-        memsetParams.elementSize    = sizeof(float);
-        memsetParams.width          = 4 * 4 * sizeof(double) / memsetParams.elementSize;
-        cudaGraphAddMemsetNode(
-            &eigenVectorsSetNode, m_graph, &last_node, 1, &memsetParams);
+        add_clear_array_node(
+            d_count, 1, counterSetNode, m_graph,
+            {});
+        add_clear_array_node(
+            m_device_eigenvectors, 4*4,
+            eigenVectorsSetNode, m_graph,
+            {});
         // last_node = eigenVectorsSetNode;
         // build matrix F
-        cudaGraphNode_t dependencies[] = {counterSetNode, eigenVectorsSetNode};
-        cudaGraphNode_t buildMatrixFNode;
+        std::vector<cudaGraphNode_t> dependencies =
+            {counterSetNode,
+             eigenVectorsSetNode,
+            gpu_nodes.centerReferenceNode,
+            gpu_nodes.centerAtomsNode
+            };
         cudaKernelNodeParams kernelNodeParams = {0};
         const void *buildMatrixFKernelArgs[] =
             {&m_device_atom_positions, &m_device_reference_positions, &m_device_eigenvectors, &m_num_atoms, &d_count};
@@ -183,8 +303,8 @@ void OptimalRotation::calculateOptimalRotationMatrix() {
         kernelNodeParams.kernelParams   =
             const_cast<void**>(buildMatrixFKernelArgs);
         kernelNodeParams.extra          = NULL;
-        cudaGraphAddKernelNode(&buildMatrixFNode, m_graph, dependencies, 2, &kernelNodeParams);
-        last_node = buildMatrixFNode;
+        cudaGraphAddKernelNode(&gpu_nodes.buildMatrixFNode, m_graph, dependencies.data(), dependencies.size(), &kernelNodeParams);
+        // last_node = buildMatrixFNode;
     }
 #else
     // build matrix F
@@ -198,7 +318,6 @@ void OptimalRotation::calculateOptimalRotationMatrix() {
 #if defined(USE_CUDA_GRAPH)
     if (graphCreated == false) {
         // Jacobi node
-        cudaGraphNode_t jacobi4x4Node;
         cudaKernelNodeParams kernelNodeParams = {0};
         const void *kernelArgs[] = {
             &m_device_eigenvectors, &m_device_eigenvalues, &max_reached};
@@ -209,8 +328,7 @@ void OptimalRotation::calculateOptimalRotationMatrix() {
         kernelNodeParams.kernelParams   =
             const_cast<void**>(kernelArgs);
         kernelNodeParams.extra          = NULL;
-        checkCudaErrors(cudaGraphAddKernelNode(&jacobi4x4Node, m_graph, &last_node, 1, &kernelNodeParams));
-        last_node = jacobi4x4Node;
+        checkCudaErrors(cudaGraphAddKernelNode(&gpu_nodes.jacobi4x4Node, m_graph, &gpu_nodes.buildMatrixFNode, 1, &kernelNodeParams));
     }
     // getLastCudaError("Line 312\n");
 #else
@@ -226,7 +344,6 @@ void OptimalRotation::calculateOptimalRotationMatrix() {
 #if defined (USE_CUDA_GRAPH)
     if (graphCreated == false) {
         // Build rotation matrix node
-        cudaGraphNode_t buildRotationMatrixKernelNode;
         cudaKernelNodeParams kernelNodeParams = {0};
         size_t max_eigenvalue_index = 3;
         void *kernelArgs[] = {
@@ -237,8 +354,7 @@ void OptimalRotation::calculateOptimalRotationMatrix() {
         kernelNodeParams.sharedMemBytes = 0;
         kernelNodeParams.kernelParams   = kernelArgs;
         kernelNodeParams.extra          = NULL;
-        checkCudaErrors(cudaGraphAddKernelNode(&buildRotationMatrixKernelNode, m_graph, &last_node, 1, &kernelNodeParams));
-        last_node = buildRotationMatrixKernelNode;
+        checkCudaErrors(cudaGraphAddKernelNode(&gpu_nodes.buildRotationMatrixKernelNode, m_graph, &gpu_nodes.jacobi4x4Node, 1, &kernelNodeParams));
     }
 #else
     nvtxRangePop();
@@ -258,6 +374,7 @@ double OptimalRotation::minimalRMSD() const {
     const int num_blocks = (m_num_atoms + block_size - 1) / block_size;
 #if defined (USE_CUDA_GRAPH)
     if (graphCreated == false) {
+        cudaGraphNode_t last_node = gpu_nodes.buildRotationMatrixKernelNode;
         // Memsets
         cudaGraphNode_t counterSetNode, deviceRMSDSetNode;
         cudaMemsetParams memsetParams = {0};
@@ -296,13 +413,18 @@ double OptimalRotation::minimalRMSD() const {
         kernelNodeParams.extra          = NULL;
         checkCudaErrors(cudaGraphAddKernelNode(
             &RMSDKernelNode, m_graph, RMSDDependencies, 2, &kernelNodeParams));
-        last_node = RMSDKernelNode;
+        // last_node = RMSDKernelNode;
         // Instantiate graph
         checkCudaErrors(cudaGraphInstantiate(&m_instance, m_graph, NULL, NULL, 0));
         graphCreated = true;
-        cudaGraphDebugDotFlags dotFlags = cudaGraphDebugDotFlagsVerbose;
-        checkCudaErrors(cudaGraphDebugDotPrint(m_graph, "graph.dot", dotFlags));
     }
+    static int iter = 0;
+    if (iter /*% 2*/ == 0) {
+        cudaGraphDebugDotFlags dotFlags = cudaGraphDebugDotFlagsVerbose;
+        const std::string filename = "graph_" + std::to_string(iter) + ".dot";
+        checkCudaErrors(cudaGraphDebugDotPrint(m_graph, filename.c_str(), dotFlags));
+    }
+    iter++;
     // Run graph
     checkCudaErrors(cudaGraphLaunch(m_instance, m_stream));
 #else
@@ -327,7 +449,7 @@ void OptimalRotation::resetGraph() {
     checkCudaErrors(cudaGraphDestroy(m_graph));
     checkCudaErrors(cudaStreamDestroy(m_stream));
     graphCreated = false;
-    last_node = NULL;
+    // last_node = NULL;
     // Recreate graph
     checkCudaErrors(cudaStreamCreate(&m_stream));
     checkCudaErrors(cudaGraphCreate(&m_graph, 0));
@@ -377,7 +499,14 @@ OptimalRotation::~OptimalRotation() {
     checkCudaErrors(cudaFree(devInfo));
     checkCudaErrors(cudaFree(device_work));
 #endif
+#if defined (USE_CUDA_GRAPH)
+    checkCudaErrors(cudaFree(m_center_tmp_ref));
+    checkCudaErrors(cudaFree(m_center_tmp_pos));
+    checkCudaErrors(cudaFree(d_count_ref));
+    checkCudaErrors(cudaFree(d_count_pos));
+#else
     checkCudaErrors(cudaFree(m_center_tmp));
+#endif
     checkCudaErrors(cudaFree(m_device_rmsd));
     checkCudaErrors(cudaFreeHost(m_host_rmsd));
     checkCudaErrors(cudaFree(d_count));
