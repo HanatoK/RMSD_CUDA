@@ -4,7 +4,7 @@
 #include "cub/block/block_reduce.cuh"
 
 // eq 33 in "Using Quaternions to Calculate RMSD"
-__global__ void build_rotation_matrix_kernel(double* eigenvectors, double* rotation_matrix, const size_t max_eigenvalue_index = 3);
+__global__ void build_rotation_matrix_kernel(double* eigenvectors, double* rotation_matrix, const size_t max_eigenvalue_index = 0);
 
 // move atoms to a given center
 __global__ void move_atom_to_center_kernel(double3* atom_positions, double3* center, const size_t num_atoms);
