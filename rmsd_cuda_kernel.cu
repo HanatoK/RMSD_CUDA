@@ -144,14 +144,18 @@ __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
     const int p_ids[] = {0, 2, 0, 1, 0, 1};
     const int q_ids[] = {1, 3, 2, 3, 3, 2};
     constexpr int max_iteration = 50;
+    // double off_diag_sum =
+    //     A[0*4+1]*A[0*4+1]+A[0*4+2]*A[0*4+2]+A[0*4+3]*A[0*4+3]+
+    //     A[1*4+2]*A[1*4+2]+A[1*4+3]*A[1*4+3]+
+    //     A[2*4+3]*A[2*4+3];
     double off_diag_sum =
-        A[0*4+1]*A[0*4+1]+A[0*4+2]*A[0*4+2]+A[0*4+3]*A[0*4+3]+
-        A[1*4+2]*A[1*4+2]+A[1*4+3]*A[1*4+3]+
-        A[2*4+3]*A[2*4+3];
+        fabs(A[0*4+1]) + fabs(A[0*4+2]) + fabs(A[0*4+3]) +
+        fabs(A[1*4+2]) + fabs(A[1*4+3]) +
+        fabs(A[2*4+3]);
     // off_diag_sum = __shfl_sync(0xFFFFFFFF, off_diag_sum, 0);
     // __syncwarp();
     int iteration = 0;
-    while (off_diag_sum > 1e-16) {
+    while (off_diag_sum > 1e-8) {
         double c = 0, s = 0, c2 = 0, s2 = 0, cs = 0;
         bool rotate = false;
         int p = p_ids[idx];
@@ -217,9 +221,12 @@ __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
         }
         __syncwarp();
         off_diag_sum =
-            A[0*4+1]*A[0*4+1]+A[0*4+2]*A[0*4+2]+A[0*4+3]*A[0*4+3]+
-            A[1*4+2]*A[1*4+2]+A[1*4+3]*A[1*4+3]+
-            A[2*4+3]*A[2*4+3];
+            // A[0*4+1]*A[0*4+1]+A[0*4+2]*A[0*4+2]+A[0*4+3]*A[0*4+3]+
+            // A[1*4+2]*A[1*4+2]+A[1*4+3]*A[1*4+3]+
+            // A[2*4+3]*A[2*4+3];
+            fabs(A[0*4+1]) + fabs(A[0*4+2]) + fabs(A[0*4+3]) +
+            fabs(A[1*4+2]) + fabs(A[1*4+3]) +
+            fabs(A[2*4+3]);
         // Check the number of iterations
         ++iteration;
         if (iteration > max_iteration) {
