@@ -362,7 +362,11 @@ void OptimalRotation::calculateOptimalRotationMatrix() {
     nvtxRangePop();
     // cudaStreamSynchronize(m_stream);
     // build the optimal rotation matrix
+#if defined(USE_NR)
     build_rotation_matrix_kernel<<<1,1,0,m_stream>>>(m_device_eigenvectors, m_device_rotation_matrix);
+#else
+    build_rotation_matrix_kernel<<<1,1,0,m_stream>>>(m_device_eigenvectors, m_device_rotation_matrix, 3);
+#endif
     // cudaStreamSynchronize(m_stream);
 #endif
 }
