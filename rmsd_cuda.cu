@@ -41,6 +41,8 @@ void update_copy_node(
   memcpyParams.dstPtr   = make_cudaPitchedPtr(
     (void*)dst, sizeof(T) * num_elements, num_elements, 1);
   memcpyParams.extent   = make_cudaExtent(sizeof(T) * num_elements, 1, 1);
+  checkCudaErrors(
+    cudaGraphMemcpyNodeSetParams(node, &memcpyParams));
   checkCudaErrors(cudaGraphExecMemcpyNodeSetParams(
     graph_exec, node,
     &memcpyParams));
@@ -345,7 +347,7 @@ void OptimalRotation::calculateOptimalRotationMatrix() {
     if (graphCreated == false) {
         // Build rotation matrix node
         cudaKernelNodeParams kernelNodeParams = {0};
-        size_t max_eigenvalue_index = 3;
+        size_t max_eigenvalue_index = 0;
         void *kernelArgs[] = {
             &m_device_eigenvectors, &m_device_rotation_matrix, &max_eigenvalue_index};
         kernelNodeParams.func           = (void*)build_rotation_matrix_kernel;
@@ -396,7 +398,7 @@ double OptimalRotation::minimalRMSD() const {
         // Compute RMSD
         cudaGraphNode_t RMSDKernelNode;
         cudaKernelNodeParams kernelNodeParams = {0};
-        const size_t max_eigenvalue_index = 3;
+        const size_t max_eigenvalue_index = 0;
         const void *kernelArgs[] = {
             &m_device_atom_positions,
             &m_device_reference_positions,
