@@ -144,10 +144,6 @@ __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
     const int p_ids[] = {0, 2, 0, 1, 0, 1};
     const int q_ids[] = {1, 3, 2, 3, 3, 2};
     constexpr int max_iteration = 50;
-    // double off_diag_sum =
-    //     A[0*4+1]*A[0*4+1]+A[0*4+2]*A[0*4+2]+A[0*4+3]*A[0*4+3]+
-    //     A[1*4+2]*A[1*4+2]+A[1*4+3]*A[1*4+3]+
-    //     A[2*4+3]*A[2*4+3];
     double off_diag_sum =
         fabs(A[0*4+1]) + fabs(A[0*4+2]) + fabs(A[0*4+3]) +
         fabs(A[1*4+2]) + fabs(A[1*4+3]) +
@@ -239,26 +235,6 @@ __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
     double p;
     if (idx == 0) {
         int k;
-        // #pragma unroll
-        // for (int i0 = 0; i0 < 4; ++i0) {
-        //     k = i0;
-        //     p = A[i0*4+i0];
-        //     for (int j0 = i0 + 1; j0 < 4; ++j0) {
-        //         if (A[j0*4+j0] < p) {
-        //             k = j0;
-        //             p = A[j0*4+j0];
-        //         }
-        //     }
-        //     if (k != i0) {
-        //         A[k*4+k] = A[i0*4+i0];
-        //         A[i0*4+i0] = p;
-        //         for (int j0 = 0; j0 < 4; ++j0) {
-        //             p = V[j0*4+i0];
-        //             V[j0*4+i0] = V[j0*4+k];
-        //             V[j0*4+k] = p;
-        //         }
-        //     }
-        // }
         k = 0;
         p = A[0*4+0];
         // Find the index of the leading eigenvalue
@@ -280,12 +256,6 @@ __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
                 V[j0*4+k] = p;
             }
         }
-    }
-    // __syncthreads();
-    // Transpose
-    // A_in[i*4+j] = V[j*4+i];
-    // if (i == j) eigvals[i] = A[idx];
-    if (idx == 0) {
         A_in[0] = V[0];
         A_in[1] = V[4];
         A_in[2] = V[8];
