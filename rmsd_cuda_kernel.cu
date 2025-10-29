@@ -44,28 +44,30 @@ __global__ void rotate_atoms_kernel(double3* atom_positions, const double* rotat
 }
 
 template <int p, int q>
-__inline__ __device__ void apply_jacobi(
+__inline__ __device__ void apply_jacobi_non_diagonal(
     // const double* __restrict old_A,
     double* __restrict A,
     const double c,
-    const double s,
-    const double c2,
-    const double s2,
-    const double cs) {
-    // const double c2 = c*c;
-    // const double s2 = s*s;
-    // const double cs = c*s;
+    const double s) {
     #pragma unroll
     for (int i = 0; i < 4; ++i) {
-        const double oip = A[i*4+p];
-        const double oiq = A[i*4+q];
         if (i != p && i != q) {
+            const double oip = A[i*4+p];
+            const double oiq = A[i*4+q];
             A[i*4+p] = c * oip - s * oiq;
             A[p*4+i] = A[i*4+p];
             A[i*4+q] = c * oiq + s * oip;
             A[q*4+i] = A[i*4+q];
         }
     }
+}
+
+__inline__ __device__ void apply_jacobi_diagonal(
+    double* __restrict A,
+    const double c2,
+    const double s2,
+    const double cs,
+    int p, int q) {
     const double opp = A[p*4+p];
     const double oqq = A[q*4+q];
     const double opq = A[p*4+q];
@@ -73,18 +75,6 @@ __inline__ __device__ void apply_jacobi(
     A[q*4+q] = s2 * opp + c2 * oqq + 2.0 * cs * opq;
     A[p*4+q] = 0;
     A[q*4+p] = 0;
-}
-
-template <int p, int q>
-__inline__ __device__ void multiply_jacobi(
-    double* __restrict V, double c, double s) {
-    #pragma unroll
-    for (int i = 0; i < 4; ++i) {
-        const double oip = V[i*4+p];
-        const double oiq = V[i*4+q];
-        V[i*4+p] = c * oip - s * oiq;
-        V[i*4+q] = s * oip + c * oiq;
-    }
 }
 
 __inline__ __device__ void multiply_jacobi(
@@ -174,15 +164,16 @@ __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
             const double a_qq = A[q*4+q];
             compute_c_s(a_pq, a_pp, a_qq, c, s, c2, s2, cs);
             multiply_jacobi(V, c, s, p, q);
+            apply_jacobi_diagonal(A, c2, s2, cs, p, q);
         }
         __syncwarp();
         if (idx == 0 && rotate) {
-            apply_jacobi<0, 1>(A, c, s, c2, s2, cs);
+            apply_jacobi_non_diagonal<0, 1>(A, c, s);
             // multiply_jacobi<0, 1>(V, c, s);
         }
         __syncwarp();
         if (idx == 1 && rotate) {
-            apply_jacobi<2, 3>(A, c, s, c2, s2, cs);
+            apply_jacobi_non_diagonal<2, 3>(A, c, s);
             // multiply_jacobi<2, 3>(V, c, s);
         }
         __syncwarp();
@@ -196,15 +187,16 @@ __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
             const double a_qq = A[q*4+q];
             compute_c_s(a_pq, a_pp, a_qq, c, s, c2, s2, cs);
             multiply_jacobi(V, c, s, p, q);
+            apply_jacobi_diagonal(A, c2, s2, cs, p, q);
         }
         __syncwarp();
         if (idx == 0 && rotate) {
-            apply_jacobi<0, 2>(A, c, s, c2, s2, cs);
+            apply_jacobi_non_diagonal<0, 2>(A, c, s);
             // multiply_jacobi<0, 2>(V, c, s);
         }
         __syncwarp();
         if (idx == 1 && rotate) {
-            apply_jacobi<1, 3>(A, c, s, c2, s2, cs);
+            apply_jacobi_non_diagonal<1, 3>(A, c, s);
             // multiply_jacobi<1, 3>(V, c, s);
         }
         __syncwarp();
@@ -218,15 +210,16 @@ __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
             const double a_qq = A[q*4+q];
             compute_c_s(a_pq, a_pp, a_qq, c, s, c2, s2, cs);
             multiply_jacobi(V, c, s, p, q);
+            apply_jacobi_diagonal(A, c2, s2, cs, p, q);
         }
         __syncwarp();
         if (idx == 0 && rotate) {
-            apply_jacobi<0, 3>(A, c, s, c2, s2, cs);
+            apply_jacobi_non_diagonal<0, 3>(A, c, s);
             // multiply_jacobi<0, 3>(V, c, s);
         }
         __syncwarp();
         if (idx == 1 && rotate) {
-            apply_jacobi<1, 2>(A, c, s, c2, s2, cs);
+            apply_jacobi_non_diagonal<1, 2>(A, c, s);
             // multiply_jacobi<1, 2>(V, c, s);
         }
         __syncwarp();
