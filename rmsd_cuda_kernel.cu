@@ -87,6 +87,17 @@ __inline__ __device__ void multiply_jacobi(
     }
 }
 
+__inline__ __device__ void multiply_jacobi(
+    double* __restrict V, double c, double s, int p, int q) {
+    #pragma unroll
+    for (int i = 0; i < 4; ++i) {
+        const double oip = V[i*4+p];
+        const double oiq = V[i*4+q];
+        V[i*4+p] = c * oip - s * oiq;
+        V[i*4+q] = s * oip + c * oiq;
+    }
+}
+
 __inline__ __device__ void compute_c_s(
     double a_pq, double a_pp, double a_qq, double& c, double& s, double& c2, double& s2, double& cs) {
     const double theta = 0.5 * (a_qq - a_pp) / a_pq;
@@ -162,16 +173,17 @@ __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
             const double a_pp = A[p*4+p];
             const double a_qq = A[q*4+q];
             compute_c_s(a_pq, a_pp, a_qq, c, s, c2, s2, cs);
+            multiply_jacobi(V, c, s, p, q);
         }
         __syncwarp();
         if (idx == 0 && rotate) {
             apply_jacobi<0, 1>(A, c, s, c2, s2, cs);
-            multiply_jacobi<0, 1>(V, c, s);
+            // multiply_jacobi<0, 1>(V, c, s);
         }
         __syncwarp();
         if (idx == 1 && rotate) {
             apply_jacobi<2, 3>(A, c, s, c2, s2, cs);
-            multiply_jacobi<2, 3>(V, c, s);
+            // multiply_jacobi<2, 3>(V, c, s);
         }
         __syncwarp();
         rotate = false;
@@ -183,16 +195,17 @@ __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
             const double a_pp = A[p*4+p];
             const double a_qq = A[q*4+q];
             compute_c_s(a_pq, a_pp, a_qq, c, s, c2, s2, cs);
+            multiply_jacobi(V, c, s, p, q);
         }
         __syncwarp();
         if (idx == 0 && rotate) {
             apply_jacobi<0, 2>(A, c, s, c2, s2, cs);
-            multiply_jacobi<0, 2>(V, c, s);
+            // multiply_jacobi<0, 2>(V, c, s);
         }
         __syncwarp();
         if (idx == 1 && rotate) {
             apply_jacobi<1, 3>(A, c, s, c2, s2, cs);
-            multiply_jacobi<1, 3>(V, c, s);
+            // multiply_jacobi<1, 3>(V, c, s);
         }
         __syncwarp();
         rotate = false;
@@ -204,16 +217,17 @@ __global__ void jacobi_4x4(double* A_in, double* eigvals, int* max_reached) {
             const double a_pp = A[p*4+p];
             const double a_qq = A[q*4+q];
             compute_c_s(a_pq, a_pp, a_qq, c, s, c2, s2, cs);
+            multiply_jacobi(V, c, s, p, q);
         }
         __syncwarp();
         if (idx == 0 && rotate) {
             apply_jacobi<0, 3>(A, c, s, c2, s2, cs);
-            multiply_jacobi<0, 3>(V, c, s);
+            // multiply_jacobi<0, 3>(V, c, s);
         }
         __syncwarp();
         if (idx == 1 && rotate) {
             apply_jacobi<1, 2>(A, c, s, c2, s2, cs);
-            multiply_jacobi<1, 2>(V, c, s);
+            // multiply_jacobi<1, 2>(V, c, s);
         }
         __syncwarp();
         off_diag_sum =
